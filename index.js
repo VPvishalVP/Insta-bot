@@ -155,6 +155,9 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(adminRouter);
+if (typeof adminRouter.setStartBotHandler === 'function') {
+  adminRouter.setStartBotHandler(startBot);
+}
 
 // HTML Web Dashboard
 app.get('/', (req, res) => {
