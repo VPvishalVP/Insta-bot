@@ -3,6 +3,7 @@ const express = require('express');
 const igManager = require('./lib/igClient');
 const replyEngine = require('./lib/replyEngine');
 const db = require('./lib/db');
+const adminRouter = require('./lib/adminRouter');
 
 const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL || '15000', 10);
 const PORT = process.env.PORT || 3005;
@@ -150,6 +151,7 @@ async function startBot(customUsername, customPassword) {
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(adminRouter);
 
 // HTML Web Dashboard
 app.get('/', (req, res) => {
@@ -351,6 +353,7 @@ app.get('/', (req, res) => {
     <button class="tab-btn" onclick="switchTab('personas')">🎭 Persona Studio (Moods)</button>
     <button class="tab-btn" onclick="switchTab('users')">👥 User Customization & Leads</button>
     <button class="tab-btn" onclick="switchTab('sender')">✉️ Manual Direct DM</button>
+    <a href="/admin" class="tab-btn" style="text-decoration:none; text-align:center; background: rgba(220, 39, 67, 0.15); color: #f87171; border: 1px solid rgba(220, 39, 67, 0.3);">🛡️ Admin Portal</a>
   </div>
 
   <!-- TAB 1: OVERVIEW & LIVE DMS -->
