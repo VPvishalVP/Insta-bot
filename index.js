@@ -1,8 +1,11 @@
 require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const igManager = require('./lib/igClient');
 const replyEngine = require('./lib/replyEngine');
 const db = require('./lib/db');
+const creds = require('./lib/creds');
 const adminRouter = require('./lib/adminRouter');
 
 const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL || '15000', 10);
@@ -394,9 +397,23 @@ app.get('/', (req, res) => {
     <div class="card" id="loginCard">
       <h2>🔐 Connect Instagram Account</h2>
       <p style="font-size: 13px; color: #94a3b8; margin-bottom: 12px;">Login credentials are encrypted and stored in your private .env and Turso DB.</p>
+      
+      <div id="savedCredsNotice" style="display: none; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; color: #6ee7b7;">
+        🔒 <strong>Password Saved:</strong> Account credentials are saved. Click <em>Connect with Saved Credentials</em> to login instantly without retyping.
+      </div>
+
       <input type="text" id="usernameInput" placeholder="Instagram Username" />
       <input type="password" id="passwordInput" placeholder="Instagram Password" />
-      <button onclick="connectAccount()">Connect & Start Bot</button>
+      
+      <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #cbd5e1; margin: 10px 0 14px 0; cursor: pointer;">
+        <input type="checkbox" id="saveCredsCheck" checked style="width: auto; margin: 0; cursor: pointer;" />
+        <span>Save credentials permanently (Auto-reconnect on restart)</span>
+      </label>
+
+      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <button id="connectBtn" onclick="connectAccount()" style="flex: 1;">Connect & Start Bot</button>
+        <button id="clearCredsBtn" onclick="clearCredentials()" class="btn-secondary" style="display: none; background: #dc2626; border-color: #b91c1c; color: #fff;">Clear Saved Password</button>
+      </div>
 
       <!-- OTP Modal / Box -->
       <div class="otp-box" id="otpBox">
@@ -562,6 +579,41 @@ async function refreshStatus() {
     if (data.globalPersona) {
       selectPersona(data.globalPersona);
     }
+
+    // Credentials status & prefill
+    if (data.savedUsername) {
+      const uInput = document.getElementById('usernameInput');
+      if (uInput && !uInput.value) {
+        uInput.value = data.savedUsername;
+      }
+    }
+
+    const pInput = document.getElementById('passwordInput');
+    const notice = document.getElementById('savedCredsNotice');
+    const clearBtn = document.getElementById('clearCredsBtn');
+    const connBtn = document.getElementById('connectBtn');
+
+    if (data.hasSavedPassword) {
+      hasSavedCredentials = true;
+      if (notice) notice.style.display = 'block';
+      if (clearBtn) clearBtn.style.display = 'inline-block';
+      if (pInput && !pInput.value) {
+        pInput.placeholder = '•••••••• (Password Saved - leave blank to use saved)';
+      }
+      if (connBtn && (!pInput || !pInput.value.trim())) {
+        connBtn.textContent = '⚡ Connect with Saved Credentials';
+      }
+    } else {
+      hasSavedCredentials = false;
+      if (notice) notice.style.display = 'none';
+      if (clearBtn) clearBtn.style.display = 'none';
+      if (connBtn && (!pInput || !pInput.value.trim())) {
+        connBtn.textContent = 'Connect & Start Bot';
+      }
+      if (pInput && !pInput.value) {
+        pInput.placeholder = 'Instagram Password';
+      }
+    }
   } catch(e) {}
 }
 
@@ -684,19 +736,80 @@ async function sendManualDm() {
   }
 }
 
+let hasSavedCredentials = false;
+
 async function connectAccount() {
   const username = document.getElementById('usernameInput').value.trim();
   const password = document.getElementById('passwordInput').value.trim();
-  if (!username || !password) {
-    alert('Please enter username and password');
+  const saveCheck = document.getElementById('saveCredsCheck');
+  const saveCredentials = saveCheck ? saveCheck.checked : true;
+
+  if (!username && !hasSavedCredentials) {
+    alert('Please enter your Instagram username');
     return;
   }
-  await fetch('/api/connect', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password })
-  });
+  if (!password && !hasSavedCredentials) {
+    alert('Please enter your Instagram password');
+    return;
+  }
+
+  const btn = document.getElementById('connectBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Connecting...';
+  }
+
+  try {
+    const res = await fetch('/api/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, saveCredentials })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || 'Connection failed');
+    }
+  } catch (err) {
+    alert('Connection error: ' + err.message);
+  } finally {
+    if (btn) btn.disabled = false;
+    refreshStatus();
+  }
+}
+
+async function clearCredentials() {
+  if (!confirm('Are you sure you want to remove the saved Instagram credentials?')) return;
+  try {
+    await fetch('/api/credentials/clear', { method: 'POST' });
+    document.getElementById('usernameInput').value = '';
+    document.getElementById('passwordInput').value = '';
+    document.getElementById('passwordInput').placeholder = 'Instagram Password';
+    const notice = document.getElementById('savedCredsNotice');
+    if (notice) notice.style.display = 'none';
+    const clearBtn = document.getElementById('clearCredsBtn');
+    if (clearBtn) clearBtn.style.display = 'none';
+    const connBtn = document.getElementById('connectBtn');
+    if (connBtn) connBtn.textContent = 'Connect & Start Bot';
+    hasSavedCredentials = false;
+    alert('Saved credentials removed!');
+  } catch (err) {
+    alert('Error clearing credentials: ' + err.message);
+  }
   refreshStatus();
+}
+
+const passInputElem = document.getElementById('passwordInput');
+if (passInputElem) {
+  passInputElem.addEventListener('input', (e) => {
+    const connBtn = document.getElementById('connectBtn');
+    if (connBtn) {
+      if (e.target.value.trim().length > 0) {
+        connBtn.textContent = hasSavedCredentials ? 'Connect & Update Password' : 'Connect & Start Bot';
+      } else if (hasSavedCredentials) {
+        connBtn.textContent = '⚡ Connect with Saved Credentials';
+      }
+    }
+  });
 }
 
 async function submitOtp() {
@@ -733,10 +846,14 @@ app.get('/api/status', async (req, res) => {
   const dbStats = await db.getStats();
   const pendingOtp = igManager.isOtpPending();
   const globalPersona = await db.getSetting('global_persona', 'sweet');
+  const credInfo = await creds.getCredentials();
+
   res.json({
     status: botStats.status,
     botActive,
-    account: igManager.currentUser ? igManager.currentUser.username : null,
+    account: igManager.currentUser ? igManager.currentUser.username : (credInfo.username || null),
+    savedUsername: credInfo.username,
+    hasSavedPassword: credInfo.hasSavedPassword,
     totalReplies: dbStats.totalReplies,
     totalUsers: dbStats.totalUsers,
     capturedLeads: dbStats.capturedLeads,
@@ -774,12 +891,33 @@ app.post('/api/persona', async (req, res) => {
 });
 
 app.post('/api/connect', async (req, res) => {
-  const { username, password } = req.body;
+  let { username, password, saveCredentials = true } = req.body;
+  const credInfo = await creds.getCredentials();
+
+  if (!username) username = credInfo.username;
+  if (!password) password = credInfo.password;
+
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required' });
   }
+
+  if (saveCredentials) {
+    await creds.saveCredentials(username, password);
+  }
+
   startBot(username, password);
-  res.json({ success: true, message: 'Login started' });
+  res.json({ success: true, message: 'Login started', saved: Boolean(saveCredentials) });
+});
+
+app.post('/api/credentials/clear', async (req, res) => {
+  try {
+    await creds.clearCredentials();
+    botStats.status = 'idle';
+    botStats.error = null;
+    res.json({ success: true, message: 'Saved credentials removed' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/submit-otp', (req, res) => {
@@ -837,9 +975,12 @@ app.post('/api/send-direct', async (req, res) => {
 app.listen(PORT, async () => {
   console.log(`🌐 Insta-Bot Dashboard running at http://localhost:${PORT}`);
   await db.init();
-  // Auto-connect if credentials already in .env
-  if (process.env.IG_USERNAME && process.env.IG_PASSWORD) {
-    startBot();
+
+  // Auto-connect: check .env and Turso DB
+  const credInfo = await creds.getCredentials();
+  if (credInfo.username && credInfo.password) {
+    console.log(`🔄 Auto-connecting saved Instagram account: @${credInfo.username}...`);
+    startBot(credInfo.username, credInfo.password);
   } else {
     console.log('ℹ️ Waiting for credentials from Web Dashboard or .env file...');
     botStats.status = 'idle';
