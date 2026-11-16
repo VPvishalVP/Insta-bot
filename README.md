@@ -1,20 +1,25 @@
 # 📸 Insta-Bot (Instagram Smart Auto-Reply & DM Bot)
 
-An automated Instagram Direct Message (DM) & Auto-Reply bot powered by **Node.js**, **Instagram Private API**, and **Groq AI (LLaMA/Qwen)**.
+An automated Instagram Direct Message (DM) & Auto-Reply bot powered by **Node.js**, **Instagram Private API**, **Turso DB (@libsql/client)**, and **Groq AI (Qwen/LLaMA)**.
+
+> 🔒 **Strict DM-Only Policy:** This bot is strictly scoped to **ONLY reply to incoming direct messages (DMs)**. It will never like feeds, follow/unfollow users, view stories, post comments, or perform unsolicited actions.
 
 ---
 
 ## ✨ Features
 
-- **🔐 2FA & OTP Checkpoint Support:** First-time login automatically detects Two-Factor Authentication (2FA) or Checkpoint Challenges and prompts for the SMS / Authenticator OTP directly in the terminal.
-- **💾 Session Persistence:** Saves session cookies to `session.json` so you only have to log in once. Avoids repeated logins and security flags.
+- **📩 Message-Only Auto-Reply:** Strictly handles incoming 1-on-1 direct text messages. Ignores spam, system notifications, media-only messages, and external actions.
+- **🗄️ Turso Database Integration (`@libsql/client`):**
+  - Keeps track of all processed messages and replies in a cloud Turso database (`insta_messages`).
+  - Persists Instagram session cookies in Turso DB (`insta_sessions`) so the bot doesn't lose login state across restarts or different machines.
+- **🔐 2FA & OTP Checkpoint Support:** Prompts in the terminal for the SMS OTP or 2FA code during the first login.
 - **⚡ Fast Keyword Rules:** Instant FAQ replies based on custom keywords defined in `rules.json`.
 - **🧠 Smart AI Fallback:** Powered by Groq AI (`qwen/qwen3.8-27b` / `llama-3.3-70b-versatile`) with customizable personality (like AAIRA).
 - **🛡️ Anti-Ban Safeguards:**
   - Realistic typing delays before replying (2–4 seconds).
   - Automatically marks incoming messages as seen.
-  - Per-user cooldown / rate limit to prevent spam.
-- **🌐 Web Status Dashboard:** Built-in lightweight Express server showing bot health and reply statistics.
+  - Per-user cooldown (8s minimum) to prevent rapid loops.
+- **🌐 Web Status Dashboard:** Built-in Express server showing bot health, Turso DB connection, and reply statistics.
 
 ---
 
@@ -25,6 +30,10 @@ Edit the `.env` file in the project root:
 ```env
 IG_USERNAME=your_instagram_username
 IG_PASSWORD=your_instagram_password
+
+# Turso Cloud Database
+TURSO_DATABASE_URL=libsql://your-db-name.turso.io
+TURSO_AUTH_TOKEN=your_turso_auth_token
 
 BOT_NAME=AAIRA
 OWNER_NAME=Vishal
@@ -49,14 +58,12 @@ node index.js
 📩 A 2FA verification code was sent.
 👉 Please enter the 6-digit 2FA OTP code: 
 ```
-- Simply enter the OTP in the terminal and press `Enter`.
-- Once verified, `session.json` is generated. On subsequent runs, the bot restores the session automatically without asking for login or OTP again!
+- Enter the OTP in the terminal and press `Enter`.
+- Once verified, the session is saved directly to **Turso DB** and local `session.json`. Next time, it will auto-restore with zero prompts!
 
 ---
 
 ## 🏃‍♂️ Running in Background (PM2)
-
-To keep the bot running 24/7 on your server:
 
 ```bash
 # Start bot with PM2
@@ -101,11 +108,13 @@ curl http://localhost:3005
 Response:
 ```json
 {
-  "name": "Instagram Auto-Reply Bot",
+  "name": "Instagram DM Auto-Reply Bot",
+  "policy": "Only replies to incoming text messages",
+  "database": "Turso DB",
   "stats": {
-    "startedAt": "2026-11-16T02:00:00.000Z",
-    "totalRepliesSent": 12,
-    "lastPollAt": "2026-11-16T02:05:00.000Z",
+    "startedAt": "2026-11-16T03:10:00.000Z",
+    "totalReplies": 15,
+    "lastPollAt": "2026-11-16T03:15:00.000Z",
     "status": "active"
   }
 }

@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const igManager = require('./lib/igClient');
 const replyEngine = require('./lib/replyEngine');
-const storage = require('./lib/storage');
+const db = require('./lib/db');
 
 const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL || '15000', 10);
 const PORT = process.env.PORT || 3005;
@@ -12,7 +12,6 @@ let botUserId = null;
 let ig = null;
 let botStats = {
   startedAt: new Date().toISOString(),
-  totalRepliesSent: 0,
   lastPollAt: null,
   status: 'initializing',
 };
@@ -20,6 +19,10 @@ let botStats = {
 // Sleep helper
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * STRICTLY ONLY replies to direct incoming messages (DMs).
+ * Does NOT like, follow, comment, view stories or perform any other action.
+ */
 async function processThread(thread) {
   if (!thread || !Array.isArray(thread.items) || thread.items.length === 0) {
     return;
@@ -32,52 +35,64 @@ async function processThread(thread) {
     return;
   }
 
-  // 2. Skip if already processed
-  if (storage.hasBeenProcessed(latestItem.item_id)) {
+  // 2. Skip if already processed in Turso DB / memory cache
+  if (db.isMessageProcessed(latestItem.item_id)) {
     return;
   }
 
-  // 3. Mark processed immediately so duplicate checks in parallel loops don't collide
-  storage.markProcessed(latestItem.item_id);
-
-  // 4. We only reply to text messages
+  // 3. STRICT RULE: ONLY process plain text DMs from real users.
+  // Ignore story shares, media, links, voice messages, reactions, system notifications.
   if (latestItem.item_type !== 'text' || !latestItem.text) {
     return;
   }
 
-  const userMessage = latestItem.text.trim();
+  const userMessage = String(latestItem.text).trim();
+  if (!userMessage) {
+    return;
+  }
+
   const senderId = latestItem.user_id;
 
-  // Find sender username if available
+  // Find sender username if available in thread
   const senderUser = (thread.users || []).find((u) => String(u.pk) === String(senderId));
   const senderUsername = senderUser ? senderUser.username : 'user';
 
   console.log(`\n📩 [New DM] From @${senderUsername}: "${userMessage}"`);
 
-  // Check rate limit per user (minimum 8 seconds between replies to avoid spam)
-  if (!storage.canReplyToUser(senderId, 8)) {
+  // Per-user rate limit (minimum 8 seconds cooldown between replies)
+  if (!db.canReplyToUser(senderId, 8)) {
     console.log(`⏳ [Cooldown] Skipping reply to @${senderUsername} (rate limited)`);
     return;
   }
 
   try {
-    // 5. Mark message as seen
+    // Mark seen
     const directThread = ig.entity.directThread(thread.thread_id);
     try {
       await directThread.markItemSeen(latestItem.item_id);
     } catch (_) {}
 
-    // 6. Generate reply using ReplyEngine (Rules -> Groq AI)
+    // Generate reply (rules.json -> Groq AI fallback)
     const reply = await replyEngine.generateReply(userMessage, senderUsername);
 
     if (reply && reply.text) {
-      // 7. Human-like typing delay (2 to 4 seconds)
+      // Natural human typing delay (2 to 4 seconds)
       const typingDelay = Math.floor(Math.random() * 2000) + 2000;
       await sleep(typingDelay);
 
-      // 8. Broadcast reply text
+      // Send the text reply in the DM thread
       await directThread.broadcastText(reply.text);
-      botStats.totalRepliesSent++;
+
+      // Record in Turso DB
+      await db.recordProcessedMessage({
+        itemId: latestItem.item_id,
+        threadId: thread.thread_id,
+        senderId: senderId,
+        senderUsername: senderUsername,
+        incomingText: userMessage,
+        replyText: reply.text,
+        source: reply.source
+      });
 
       console.log(`🤖 [Replied (${reply.source})] to @${senderUsername}: "${reply.text}"`);
     } else {
@@ -101,9 +116,8 @@ async function pollInbox() {
       await processThread(thread);
     }
   } catch (err) {
-    // Handle transient network errors or rate limit pauses
     if (err.message && err.message.includes('feedback_required')) {
-      console.warn('⚠️ [RateLimit] Action temporarily blocked by Instagram. Pausing 2 minutes...');
+      console.warn('⚠️ [RateLimit] Action temporarily throttled by Instagram. Pausing 2 minutes...');
       await sleep(120000);
     } else {
       console.warn('⚠️ [Polling Error]:', err.message);
@@ -115,10 +129,15 @@ async function pollInbox() {
 
 async function startBot() {
   try {
-    console.log('==========================================');
-    console.log('🚀 Starting Instagram Auto-Reply Bot...');
-    console.log('==========================================');
+    console.log('==================================================');
+    console.log('🚀 Starting Instagram DM Auto-Reply Bot (Turso DB)...');
+    console.log('📌 Policy: STRICTLY ONLY replies to messages (DMs).');
+    console.log('==================================================');
 
+    // 1. Initialize Turso DB tables & cache
+    await db.init();
+
+    // 2. Login or restore Instagram session
     ig = await igManager.login();
     const currentUser = await ig.account.currentUser();
     botUserId = currentUser.pk;
@@ -126,9 +145,9 @@ async function startBot() {
     console.log(`🤖 Bot Active! Listening to DMs for @${currentUser.username} (ID: ${botUserId})`);
     botStats.status = 'active';
 
-    // Start polling loop
+    // 3. Start inbox polling loop
     setInterval(pollInbox, POLL_INTERVAL);
-    // Initial run
+    // Run initial poll
     pollInbox();
   } catch (err) {
     console.error('💥 Fatal initialization error:', err.message);
@@ -139,10 +158,16 @@ async function startBot() {
 
 // Lightweight HTTP status server
 const app = express();
-app.get('/', (req, res) => {
+app.get('/', async (req, res) => {
+  const dbStats = await db.getStats();
   res.json({
-    name: 'Instagram Auto-Reply Bot',
-    stats: botStats,
+    name: 'Instagram DM Auto-Reply Bot',
+    policy: 'Only replies to incoming text messages',
+    database: 'Turso DB',
+    stats: {
+      ...botStats,
+      ...dbStats
+    },
   });
 });
 
@@ -154,12 +179,10 @@ app.listen(PORT, () => {
 // Graceful exit
 process.on('SIGINT', () => {
   console.log('\n🛑 Stopping bot gracefully...');
-  storage.save();
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
   console.log('\n🛑 Stopping bot gracefully...');
-  storage.save();
   process.exit(0);
 });
