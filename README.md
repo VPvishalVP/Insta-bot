@@ -1,121 +1,55 @@
-# 📸 Insta-Bot (Instagram Smart Auto-Reply & DM Bot)
+# 📸 Insta-Bot (Personalized Multi-Persona Instagram DM Auto-Reply)
 
-An automated Instagram Direct Message (DM) & Auto-Reply bot powered by **Node.js**, **Instagram Private API**, **Turso DB (@libsql/client)**, and **Groq AI (Qwen/LLaMA)**.
+An advanced, intelligent Instagram Direct Message (DM) & Auto-Reply bot powered by **Node.js**, **Instagram Private API**, **Turso DB (@libsql/client)**, and **Groq AI (Qwen/LLaMA)**.
 
 > 🔒 **Strict DM-Only Policy:** This bot is strictly scoped to **ONLY reply to incoming direct messages (DMs)**. It will never like feeds, follow/unfollow users, view stories, post comments, or perform unsolicited actions.
 
 ---
 
-## ✨ Features
+## 🌟 Advanced "Sabka Alag Mood" (Personalized) Features
 
-- **📩 Message-Only Auto-Reply:** Strictly handles incoming 1-on-1 direct text messages. Ignores spam, system notifications, media-only messages, and external actions.
-- **🗄️ Turso Database Integration (`@libsql/client`):**
-  - Keeps track of all processed messages and replies in a cloud Turso database (`insta_messages`).
-  - Persists Instagram session cookies in Turso DB (`insta_sessions`) so the bot doesn't lose login state across restarts or different machines.
-- **🔐 2FA & OTP Checkpoint Support:** Prompts in the terminal for the SMS OTP or 2FA code during the first login.
-- **⚡ Fast Keyword Rules:** Instant FAQ replies based on custom keywords defined in `rules.json`.
-- **🧠 Smart AI Fallback:** Powered by Groq AI (`qwen/qwen3.8-27b` / `llama-3.3-70b-versatile`) with customizable personality (like AAIRA).
-- **🛡️ Anti-Ban Safeguards:**
-  - Realistic typing delays before replying (2–4 seconds).
-  - Automatically marks incoming messages as seen.
-  - Per-user cooldown (8s minimum) to prevent rapid loops.
-- **🌐 Web Status Dashboard:** Built-in Express server showing bot health, Turso DB connection, and reply statistics.
-
----
-
-## 🚀 Quick Setup
-
-### 1. Configure Credentials
-Edit the `.env` file in the project root:
-```env
-IG_USERNAME=your_instagram_username
-IG_PASSWORD=your_instagram_password
-
-# Turso Cloud Database
-TURSO_DATABASE_URL=libsql://your-db-name.turso.io
-TURSO_AUTH_TOKEN=your_turso_auth_token
-
-BOT_NAME=AAIRA
-OWNER_NAME=Vishal
-
-ENABLE_AI=true
-GROQ_API_KEY=your_groq_api_key
-GROQ_MODEL=qwen/qwen3.8-27b
-
-POLL_INTERVAL=15000
-PORT=3005
-```
-
-### 2. Start the Bot
-```bash
-node index.js
-```
-
-### 3. First-Time Login (OTP Handling)
-- When you first run the bot, Instagram may send an **SMS OTP** or require **2FA**:
-```
-🔐 [Instagram] 2FA Required! Two-Factor Authentication is enabled.
-📩 A 2FA verification code was sent.
-👉 Please enter the 6-digit 2FA OTP code: 
-```
-- Enter the OTP in the terminal and press `Enter`.
-- Once verified, the session is saved directly to **Turso DB** and local `session.json`. Next time, it will auto-restore with zero prompts!
+- 🎭 **Persona Studio (Multi-Mood AI):**
+  - 🌸 **AAIRA Sweet & Caring (Default):** Warm, feminine Hinglish assistant with cute emojis and friendly care.
+  - 💼 **Professional & Business:** Crisp, respectful, ideal for business/brand collaboration inquiries.
+  - 🔥 **Savage Roast & Banter:** Funny, witty, sarcastic punchlines for friends and entertaining chats.
+  - 🤙 **Chill Bro / Buddy:** Relaxed, informal brotherly vibe.
+- 👥 **Individual Per-User Memory (Sabka Context Alag):**
+  - Turso DB stores multi-turn conversation history for every user (`insta_conversations`).
+  - If a user mentions their name, hobby, or question, the bot remembers it in future messages!
+- 🎯 **Automatic Lead & Contact Capture:**
+  - Automatically detects when a user shares their phone number or email address in DM and saves it directly to Turso DB (`insta_user_profiles`).
+- ⭐ **VIP & Block List Control:**
+  - Mark specific friends as **VIP** for priority high-respect responses.
+  - One-click **Block** to permanently ignore unwanted accounts.
+- ✉️ **Manual Direct DM Sender:**
+  - Send direct DMs to any Instagram user directly from the Web Dashboard without opening the Instagram app.
+- 💾 **Turso Cloud Persistence:**
+  - Sessions and user profiles are stored in Turso DB, keeping them safe across restarts or deployments.
 
 ---
 
-## 🏃‍♂️ Running in Background (PM2)
+## 🚀 Quick Setup & Web Dashboard
 
+### 1. Web Dashboard (Recommended)
+Open your Cloudflare tunnel dashboard link:
+```
+https://happy-tar-intensity-dodge.trycloudflare.com
+```
+1. Enter your Instagram Username and Password.
+2. If 2FA or SMS OTP is required, the prompt appears right on the web page — enter the 6-digit OTP and click **Submit OTP**.
+3. Once logged in, the bot starts monitoring DMs immediately!
+
+### 2. Manual Terminal Start
 ```bash
-# Start bot with PM2
+cd /home/ipx/Insta-bot
 pm2 start index.js --name "insta-bot"
-
-# View live logs
-pm2 logs insta-bot
-
-# Save PM2 process list
-pm2 save
 ```
 
 ---
 
-## ⚙️ Customizing Auto-Reply Rules
+## 📊 Live Web Dashboard Features
 
-Edit `rules.json` to add or edit custom keyword responses:
-
-```json
-[
-  {
-    "keywords": ["hi", "hello", "hey"],
-    "reply": "Hey there! 😊 Kaise ho aap? Main Vishal ki AI assistant hu."
-  },
-  {
-    "keywords": ["help", "support"],
-    "reply": "Ji bataiye, aapko kis cheez me help chahiye? ✨"
-  }
-]
-```
-
-If a user message doesn't match any keyword in `rules.json`, the bot automatically delegates to **Groq AI** to generate a natural, conversational response!
-
----
-
-## 📊 Status API
-
-Open `http://localhost:3005` in your browser or curl:
-```bash
-curl http://localhost:3005
-```
-Response:
-```json
-{
-  "name": "Instagram DM Auto-Reply Bot",
-  "policy": "Only replies to incoming text messages",
-  "database": "Turso DB",
-  "stats": {
-    "startedAt": "2026-11-16T03:10:00.000Z",
-    "totalReplies": 15,
-    "lastPollAt": "2026-11-16T03:15:00.000Z",
-    "status": "active"
-  }
-}
-```
+- **📊 Overview:** Live bot status, connected account, replies counter, leads counter, and live DM history.
+- **🎭 Persona Studio:** Switch global AI personality with 1-click.
+- **👥 Users & Leads:** View all users who messaged, their custom mood, VIP status, and auto-captured phone numbers.
+- **✉️ Direct DM:** Send manual messages directly from the browser.

@@ -72,7 +72,7 @@ async function processThread(thread) {
       // Send the text reply in the DM thread
       await directThread.broadcastText(reply.text);
 
-      // Record in Turso DB
+      // Record in Turso DB (includes multi-turn memory + lead extraction)
       await db.recordProcessedMessage({
         itemId: latestItem.item_id,
         threadId: thread.thread_id,
@@ -85,7 +85,7 @@ async function processThread(thread) {
 
       console.log(`🤖 [Replied (${reply.source})] to @${senderUsername}: "${reply.text}"`);
     } else {
-      console.log(`ℹ️ [Ignored] No matching rule or AI response for message.`);
+      console.log(`ℹ️ [Ignored] No matching rule or user blocked.`);
     }
   } catch (err) {
     console.error(`❌ [Error replying to @${senderUsername}]:`, err.message);
@@ -151,31 +151,31 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve HTML Dashboard
+// HTML Web Dashboard
 app.get('/', (req, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>📸 Insta-Bot | Smart DM Auto-Reply</title>
+<title>📸 Insta-Bot | Smart Multi-Persona DM Auto-Reply</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    background: #0a0a0f;
+    background: #09090e;
     color: #e2e8f0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     min-height: 100vh;
-    padding: 20px 15px;
-    background-image: radial-gradient(circle at 10% 20%, rgba(131, 58, 180, 0.15) 0%, transparent 40%),
-                      radial-gradient(circle at 90% 80%, rgba(253, 29, 29, 0.12) 0%, transparent 40%);
+    padding: 20px 14px;
+    background-image: radial-gradient(circle at 10% 20%, rgba(131, 58, 180, 0.18) 0%, transparent 40%),
+                      radial-gradient(circle at 90% 80%, rgba(253, 29, 29, 0.15) 0%, transparent 40%);
   }
-  .container { max-width: 800px; margin: 0 auto; }
+  .container { max-width: 900px; margin: 0 auto; }
   header {
     text-align: center;
-    padding: 20px 0 25px;
+    padding: 18px 0 22px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    margin-bottom: 25px;
+    margin-bottom: 20px;
   }
   h1 {
     font-size: 28px;
@@ -185,8 +185,41 @@ app.get('/', (req, res) => {
     -webkit-text-fill-color: transparent;
     letter-spacing: -0.5px;
   }
-  .subtitle { color: #94a3b8; font-size: 14px; margin-top: 6px; }
-  .grid { display: grid; grid-template-columns: 1fr; gap: 18px; }
+  .subtitle { color: #94a3b8; font-size: 13px; margin-top: 6px; }
+
+  /* Navigation Tabs */
+  .nav-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 6px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    overflow-x: auto;
+  }
+  .tab-btn {
+    flex: 1;
+    padding: 10px 14px;
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+  .tab-btn.active {
+    background: linear-gradient(135deg, rgba(230, 104, 60, 0.25), rgba(188, 24, 136, 0.25));
+    color: #fff;
+    border: 1px solid rgba(230, 104, 60, 0.4);
+  }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
   .card {
     background: rgba(18, 18, 26, 0.85);
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -194,26 +227,30 @@ app.get('/', (req, res) => {
     padding: 22px;
     backdrop-filter: blur(12px);
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    margin-bottom: 18px;
   }
   h2 { font-size: 16px; font-weight: 700; color: #f8fafc; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
   .status-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  
   .badge {
     padding: 6px 14px;
     border-radius: 20px;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
   }
   .badge-active { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
   .badge-connecting { background: rgba(234, 179, 8, 0.15); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3); }
   .badge-error { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
   .badge-idle { background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); }
-  .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 15px; }
+
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 15px; }
+  @media(max-width: 600px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
   .stat-box { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05); padding: 12px; border-radius: 10px; text-align: center; }
   .stat-val { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 2px; }
   .stat-lbl { font-size: 11px; color: #64748b; text-transform: uppercase; }
-  input {
+
+  input, select, textarea {
     width: 100%;
     background: rgba(10, 10, 15, 0.7);
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -225,7 +262,8 @@ app.get('/', (req, res) => {
     outline: none;
     transition: all 0.2s;
   }
-  input:focus { border-color: #e6683c; box-shadow: 0 0 10px rgba(230, 104, 60, 0.25); }
+  input:focus, select:focus, textarea:focus { border-color: #e6683c; box-shadow: 0 0 10px rgba(230, 104, 60, 0.25); }
+
   button {
     width: 100%;
     padding: 12px 16px;
@@ -244,6 +282,12 @@ app.get('/', (req, res) => {
     color: #e2e8f0;
     border: 1px solid rgba(255, 255, 255, 0.1);
   }
+  button.btn-sm {
+    width: auto;
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
   .otp-box {
     margin-top: 15px;
     padding: 16px;
@@ -253,7 +297,8 @@ app.get('/', (req, res) => {
     display: none;
   }
   .otp-box.active { display: block; }
-  .messages-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; max-height: 400px; overflow-y: auto; }
+
+  .messages-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; max-height: 420px; overflow-y: auto; }
   .msg-item {
     background: rgba(255, 255, 255, 0.03);
     border-left: 3px solid #dc2743;
@@ -265,25 +310,51 @@ app.get('/', (req, res) => {
   .msg-user { font-weight: 700; color: #f87171; }
   .msg-incoming { color: #f1f5f9; margin-bottom: 6px; }
   .msg-reply { color: #4ade80; background: rgba(34, 197, 94, 0.08); padding: 6px 10px; border-radius: 6px; }
-  .notice {
-    font-size: 12px;
-    color: #94a3b8;
+
+  /* Persona Card Grid */
+  .persona-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; }
+  @media(max-width: 600px) { .persona-grid { grid-template-columns: 1fr; } }
+  .persona-box {
     background: rgba(255, 255, 255, 0.03);
-    padding: 10px;
-    border-radius: 8px;
-    margin-top: 10px;
-    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
   }
+  .persona-box:hover { border-color: #e6683c; background: rgba(230, 104, 60, 0.06); }
+  .persona-box.selected { border-color: #e6683c; background: rgba(230, 104, 60, 0.15); box-shadow: 0 0 15px rgba(230, 104, 60, 0.2); }
+  .persona-title { font-weight: 700; font-size: 15px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+  .persona-desc { font-size: 12px; color: #94a3b8; line-height: 1.4; }
+
+  /* User Profiles Table */
+  .user-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+  .user-table th, .user-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+  .user-table th { color: #64748b; font-size: 11px; text-transform: uppercase; }
+  .pill-vip { background: rgba(234, 179, 8, 0.15); color: #facc15; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+  .pill-blocked { background: rgba(239, 68, 68, 0.15); color: #f87171; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+  .pill-persona { background: rgba(188, 24, 136, 0.15); color: #f472b6; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+
+  .notice { font-size: 12px; color: #94a3b8; background: rgba(255, 255, 255, 0.03); padding: 12px; border-radius: 8px; margin-top: 15px; text-align: center; }
 </style>
 </head>
 <body>
 <div class="container">
   <header>
     <h1>📸 Insta-Bot</h1>
-    <p class="subtitle">AI-Powered Instagram DM Auto-Reply • Turso Cloud Database</p>
+    <p class="subtitle">Personalized AI Instagram DM Auto-Reply • Multi-Persona • Turso Cloud Memory</p>
   </header>
 
-  <div class="grid">
+  <!-- Navigation Tabs -->
+  <div class="nav-tabs">
+    <button class="tab-btn active" onclick="switchTab('overview')">📊 Overview & Live DMs</button>
+    <button class="tab-btn" onclick="switchTab('personas')">🎭 Persona Studio (Moods)</button>
+    <button class="tab-btn" onclick="switchTab('users')">👥 User Customization & Leads</button>
+    <button class="tab-btn" onclick="switchTab('sender')">✉️ Manual Direct DM</button>
+  </div>
+
+  <!-- TAB 1: OVERVIEW & LIVE DMS -->
+  <div id="tab-overview" class="tab-content active">
     <!-- Status Card -->
     <div class="card">
       <div class="status-row">
@@ -299,8 +370,12 @@ app.get('/', (req, res) => {
           <div class="stat-lbl">Replies Sent</div>
         </div>
         <div class="stat-box">
-          <div class="stat-val" id="statCached">0</div>
-          <div class="stat-lbl">Cached Msgs</div>
+          <div class="stat-val" id="statUsers">0</div>
+          <div class="stat-lbl">Active Users</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val" id="statLeads">0</div>
+          <div class="stat-lbl">Leads Captured</div>
         </div>
         <div class="stat-box">
           <div class="stat-val" id="statDb">Connected</div>
@@ -315,7 +390,7 @@ app.get('/', (req, res) => {
     <!-- Login / Connect Card -->
     <div class="card" id="loginCard">
       <h2>🔐 Connect Instagram Account</h2>
-      <p style="font-size: 13px; color: #94a3b8; margin-bottom: 12px;">Enter your credentials to link your Instagram account. Credentials are saved only to your private .env and Turso DB.</p>
+      <p style="font-size: 13px; color: #94a3b8; margin-bottom: 12px;">Login credentials are encrypted and stored in your private .env and Turso DB.</p>
       <input type="text" id="usernameInput" placeholder="Instagram Username" />
       <input type="password" id="passwordInput" placeholder="Instagram Password" />
       <button onclick="connectAccount()">Connect & Start Bot</button>
@@ -326,25 +401,124 @@ app.get('/', (req, res) => {
           📩 OTP verification code requested!
         </p>
         <input type="text" id="otpCodeInput" placeholder="Enter 6-digit OTP code" />
-        <button onclick="submitOtp()">Submit OTP</button>
+        <button onclick="submitOtp()">Submit OTP Code</button>
       </div>
     </div>
 
-    <!-- Recent Messages Card -->
+    <!-- Recent Auto-Replied DMs -->
     <div class="card">
-      <h2>💬 Recent Auto-Replied DMs</h2>
+      <h2>💬 Recent Auto-Replied DMs (Live from Turso DB)</h2>
       <div class="messages-list" id="messagesList">
         <p style="color: #64748b; font-size: 13px; text-align: center; padding: 20px;">No messages received yet.</p>
       </div>
     </div>
+  </div>
 
-    <div class="notice">
-      🔒 <strong>Policy Note:</strong> This bot strictly replies to incoming text messages only. It will never like, comment, view stories or follow/unfollow users.
+  <!-- TAB 2: PERSONA STUDIO -->
+  <div id="tab-personas" class="tab-content">
+    <div class="card">
+      <h2>🎭 Choose AI Personality (Global Mood)</h2>
+      <p style="font-size: 13px; color: #94a3b8; margin-bottom: 16px;">
+        Select how your AI assistant speaks to people in DMs by default:
+      </p>
+
+      <div class="persona-grid">
+        <div class="persona-box selected" id="persona-sweet" onclick="selectPersona('sweet')">
+          <div class="persona-title">🌸 AAIRA Sweet & Caring</div>
+          <div class="persona-desc">Warm, feminine, sweet Hinglish assistant. Uses cute emojis, caring tone, natural chat style.</div>
+        </div>
+        <div class="persona-box" id="persona-business" onclick="selectPersona('business')">
+          <div class="persona-title">💼 Professional & Business</div>
+          <div class="persona-desc">Formal, respectful, direct. Ideal for client inquiries, collaborations, and official support.</div>
+        </div>
+        <div class="persona-box" id="persona-savage" onclick="selectPersona('savage')">
+          <div class="persona-title">🔥 Savage Roast & Banter</div>
+          <div class="persona-desc">Funny, witty, sarcastic jokes and punchlines. Great for friends and entertaining banter.</div>
+        </div>
+        <div class="persona-box" id="persona-casual" onclick="selectPersona('casual')">
+          <div class="persona-title">🤙 Chill Bro / Buddy</div>
+          <div class="persona-desc">Super relaxed, informal bro vibes. Talks like a friendly buddy hanging out.</div>
+        </div>
+      </div>
+
+      <button onclick="savePersona()">Save Active Persona</button>
     </div>
+  </div>
+
+  <!-- TAB 3: USERS & LEADS -->
+  <div id="tab-users" class="tab-content">
+    <div class="card">
+      <h2>👥 User Customization & Captured Leads</h2>
+      <p style="font-size: 13px; color: #94a3b8; margin-bottom: 14px;">
+        Har user ke liye alag mood set karein, VIP mark karein, ya auto-captured phone numbers aur emails check karein:
+      </p>
+
+      <div style="overflow-x: auto;">
+        <table class="user-table">
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Status</th>
+              <th>Persona</th>
+              <th>Lead Info (Phone / Email)</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="userTableBody">
+            <tr><td colspan="5" style="text-align: center; color: #64748b;">Loading user profiles...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 4: MANUAL DIRECT DM -->
+  <div id="tab-sender" class="tab-content">
+    <div class="card">
+      <h2>✉️ Send Manual Direct Message (DM)</h2>
+      <p style="font-size: 13px; color: #94a3b8; margin-bottom: 14px;">
+        Aap seedha is dashboard se kisi bhi Instagram user ko DM bhej sakte hain:
+      </p>
+
+      <input type="text" id="targetUserInput" placeholder="Recipient Instagram Username (without @)" />
+      <textarea id="targetMessageInput" rows="3" placeholder="Type your message here..."></textarea>
+      <button onclick="sendManualDm()">Send DM Now</button>
+      <div id="sendResult" style="margin-top: 10px; font-size: 13px;"></div>
+    </div>
+  </div>
+
+  <div class="notice">
+    🔒 <strong>Strict Policy:</strong> Bot strictly operates on Direct Messages only. No follow, like, or story viewing actions.
   </div>
 </div>
 
 <script>
+let currentGlobalPersona = 'sweet';
+
+function switchTab(tabId) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + tabId).classList.add('active');
+  event.target.classList.add('active');
+
+  if (tabId === 'users') loadProfiles();
+}
+
+function selectPersona(type) {
+  currentGlobalPersona = type;
+  document.querySelectorAll('.persona-box').forEach(b => b.classList.remove('selected'));
+  document.getElementById('persona-' + type).classList.add('selected');
+}
+
+async function savePersona() {
+  await fetch('/api/persona', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ persona: currentGlobalPersona })
+  });
+  alert('Active persona updated to: ' + currentGlobalPersona);
+}
+
 async function refreshStatus() {
   try {
     const res = await fetch('/api/status');
@@ -368,7 +542,8 @@ async function refreshStatus() {
 
     document.getElementById('igUser').textContent = data.account ? '@' + data.account : 'Not Connected';
     document.getElementById('statReplies').textContent = data.totalReplies || 0;
-    document.getElementById('statCached').textContent = data.cachedIds || 0;
+    document.getElementById('statUsers').textContent = data.totalUsers || 0;
+    document.getElementById('statLeads').textContent = data.capturedLeads || 0;
 
     const toggleBtn = document.getElementById('toggleBtn');
     toggleBtn.textContent = data.botActive ? 'Pause Bot' : 'Resume Bot';
@@ -379,6 +554,10 @@ async function refreshStatus() {
       document.getElementById('otpPrompt').textContent = '📩 ' + data.pendingOtp.prompt;
     } else {
       otpBox.classList.remove('active');
+    }
+
+    if (data.globalPersona) {
+      selectPersona(data.globalPersona);
     }
   } catch(e) {}
 }
@@ -405,6 +584,103 @@ async function refreshMessages() {
   } catch(e) {}
 }
 
+async function loadProfiles() {
+  try {
+    const res = await fetch('/api/profiles');
+    const profiles = await res.json();
+    const tbody = document.getElementById('userTableBody');
+    if (!profiles || profiles.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 20px;">No user profiles yet. Once people DM you, they will appear here!</td></tr>';
+      return;
+    }
+    tbody.innerHTML = profiles.map(p => \`
+      <tr>
+        <td><strong>@\${p.username}</strong> \${p.custom_name ? '(\' + p.custom_name + \')' : ''}</td>
+        <td>
+          \${p.is_vip ? '<span class="pill-vip">⭐ VIP</span> ' : ''}
+          \${p.is_blocked ? '<span class="pill-blocked">🚫 Blocked</span>' : '<span style="color:#4ade80;">Active</span>'}
+        </td>
+        <td><span class="pill-persona">\${p.persona || 'default'}</span></td>
+        <td>
+          \${p.lead_phone ? '📱 ' + p.lead_phone + '<br>' : ''}
+          \${p.lead_email ? '✉️ ' + p.lead_email : ''}
+          \${(!p.lead_phone && !p.lead_email) ? '<span style="color:#64748b;">No lead captured</span>' : ''}
+        </td>
+        <td>
+          <button class="btn-secondary btn-sm" onclick="toggleVip('\${p.username}', \${p.is_vip ? 0 : 1})">\${p.is_vip ? 'Remove VIP' : 'Make VIP'}</button>
+          <button class="btn-secondary btn-sm" onclick="toggleBlock('\${p.username}', \${p.is_blocked ? 0 : 1})">\${p.is_blocked ? 'Unblock' : 'Block'}</button>
+          <button class="btn-secondary btn-sm" onclick="setCustomPersona('\${p.username}')">Set Mood</button>
+        </td>
+      </tr>
+    \`).join('');
+  } catch(e) {}
+}
+
+async function toggleVip(username, is_vip) {
+  await fetch('/api/profiles/update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, is_vip })
+  });
+  loadProfiles();
+}
+
+async function toggleBlock(username, is_blocked) {
+  await fetch('/api/profiles/update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, is_blocked })
+  });
+  loadProfiles();
+}
+
+async function setCustomPersona(username) {
+  const persona = prompt('Enter custom mood for @' + username + ' (sweet / business / savage / casual):', 'savage');
+  if (persona) {
+    await fetch('/api/profiles/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, persona: persona.toLowerCase().trim() })
+    });
+    loadProfiles();
+  }
+}
+
+async function sendManualDm() {
+  const username = document.getElementById('targetUserInput').value.trim();
+  const text = document.getElementById('targetMessageInput').value.trim();
+  const resDiv = document.getElementById('sendResult');
+
+  if (!username || !text) {
+    alert('Please enter username and message');
+    return;
+  }
+
+  resDiv.style.color = '#facc15';
+  resDiv.textContent = 'Sending message to @' + username + '...';
+
+  try {
+    const res = await fetch('/api/send-direct', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, text })
+    });
+    const data = await res.json();
+    if (data.success) {
+      resDiv.style.color = '#4ade80';
+      resDiv.textContent = '✅ Message sent successfully!';
+      document.getElementById('targetMessageInput').value = '';
+      refreshMessages();
+    } else {
+      resDiv.style.color = '#f87171';
+      resDiv.textContent = '❌ ' + (data.error || 'Failed to send message');
+    }
+  } catch(e) {
+    resDiv.style.color = '#f87171';
+    resDiv.textContent = '❌ Error: ' + e.message;
+  }
+}
+
 async function connectAccount() {
   const username = document.getElementById('usernameInput').value.trim();
   const password = document.getElementById('passwordInput').value.trim();
@@ -412,12 +688,11 @@ async function connectAccount() {
     alert('Please enter username and password');
     return;
   }
-  const res = await fetch('/api/connect', {
+  await fetch('/api/connect', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password })
   });
-  const data = await res.json();
   refreshStatus();
 }
 
@@ -427,7 +702,7 @@ async function submitOtp() {
     alert('Please enter OTP code');
     return;
   }
-  const res = await fetch('/api/submit-otp', {
+  await fetch('/api/submit-otp', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code })
@@ -454,12 +729,16 @@ refreshMessages();
 app.get('/api/status', async (req, res) => {
   const dbStats = await db.getStats();
   const pendingOtp = igManager.isOtpPending();
+  const globalPersona = await db.getSetting('global_persona', 'sweet');
   res.json({
     status: botStats.status,
     botActive,
     account: igManager.currentUser ? igManager.currentUser.username : null,
     totalReplies: dbStats.totalReplies,
+    totalUsers: dbStats.totalUsers,
+    capturedLeads: dbStats.capturedLeads,
     cachedIds: dbStats.cachedIds,
+    globalPersona,
     pendingOtp,
     error: botStats.error,
   });
@@ -470,12 +749,32 @@ app.get('/api/messages', async (req, res) => {
   res.json(messages);
 });
 
+app.get('/api/profiles', async (req, res) => {
+  const profiles = await db.getAllProfiles();
+  res.json(profiles);
+});
+
+app.post('/api/profiles/update', async (req, res) => {
+  const { username, ...data } = req.body;
+  if (!username) {
+    return res.status(400).json({ error: 'Username required' });
+  }
+  await db.updateUserProfile(username, data);
+  res.json({ success: true });
+});
+
+app.post('/api/persona', async (req, res) => {
+  const { persona } = req.body;
+  if (!persona) return res.status(400).json({ error: 'Persona required' });
+  await db.setSetting('global_persona', persona);
+  res.json({ success: true, persona });
+});
+
 app.post('/api/connect', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required' });
   }
-  // Start login in background
   startBot(username, password);
   res.json({ success: true, message: 'Login started' });
 });
@@ -492,6 +791,43 @@ app.post('/api/submit-otp', (req, res) => {
 app.post('/api/toggle', (req, res) => {
   botActive = !botActive;
   res.json({ botActive });
+});
+
+// Manual direct DM sender
+app.post('/api/send-direct', async (req, res) => {
+  const { username, text } = req.body;
+  if (!username || !text) {
+    return res.status(400).json({ error: 'Recipient username and message text required' });
+  }
+  if (!ig || !igManager.isLoggedIn) {
+    return res.status(400).json({ error: 'Instagram bot is not logged in' });
+  }
+
+  try {
+    const cleanUser = username.replace(/^@/, '').trim();
+    const user = await ig.user.searchExact(cleanUser);
+    if (!user || !user.pk) {
+      return res.status(404).json({ error: `Instagram user @${cleanUser} not found` });
+    }
+
+    const thread = ig.entity.directThread([String(user.pk)]);
+    await thread.broadcastText(text);
+
+    // Record to Turso DB
+    await db.recordProcessedMessage({
+      itemId: 'manual_' + Date.now(),
+      threadId: 'manual',
+      senderId: user.pk,
+      senderUsername: cleanUser,
+      incomingText: '(Manual Web Direct)',
+      replyText: text,
+      source: 'manual-web'
+    });
+
+    res.json({ success: true, user: cleanUser });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Start server
