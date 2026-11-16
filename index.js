@@ -507,11 +507,7 @@ app.get('/', (req, res) => {
         <button type="button" onclick="submitGateOtp()" style="width: 100%;">SUBMIT OTP CODE</button>
       </div>
 
-      <div style="margin-top: 20px; text-align: center;">
-        <a href="/admin" style="color: #888; font-size: 12px; text-decoration: none; border-bottom: 1px dashed #555; padding-bottom: 2px;">
-          🛡️ Owner Admin Portal Login →
-        </a>
-      </div>
+
     </div>
   </div>
 </section>
