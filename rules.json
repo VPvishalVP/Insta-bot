@@ -1,0 +1,18 @@
+[
+  {
+    "keywords": ["hi", "hello", "hey", "namaste", "suno"],
+    "reply": "Hey there! 😊 Kaise ho aap? Main Vishal ki AI assistant hu. Main aapki kya help kar sakti hu?"
+  },
+  {
+    "keywords": ["help", "madad"],
+    "reply": "Ji bataiye, aapko kis cheez me help chahiye? Aap yahan apna message drop kar sakte hain! ✨"
+  },
+  {
+    "keywords": ["owner", "admin", "kaun ho", "who are you"],
+    "reply": "Ye account Vishal ka hai aur main unki automated AI assistant hu. Vishal abhi busy hain, free hote hi aapka message dekh lenge! 🌸"
+  },
+  {
+    "keywords": ["contact", "call", "number"],
+    "reply": "Aap apna zaroori message aur contact details yahan chhod sakte hain, Vishal jald hi connect karenge. 🤝"
+  }
+]
