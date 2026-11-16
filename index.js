@@ -16,11 +16,12 @@ let pollingTimer = null;
 let botUserId = null;
 let ig = null;
 let botActive = true;
+let pendingSaveCredentials = null;
 
 let botStats = {
   startedAt: new Date().toISOString(),
   lastPollAt: null,
-  status: 'initializing',
+  status: 'idle',
   error: null,
 };
 
@@ -141,6 +142,13 @@ async function startBot(customUsername, customPassword) {
     console.log(`🤖 Bot Active! Listening to DMs for @${currentUser.username} (ID: ${botUserId})`);
     botStats.status = 'active';
 
+    // If pendingSaveCredentials matches this user, persist now that login succeeded!
+    if (pendingSaveCredentials && pendingSaveCredentials.username === customUsername) {
+      await creds.saveCredentials(pendingSaveCredentials.username, pendingSaveCredentials.password);
+      console.log(`✅ [Creds] Instagram credentials verified & saved permanently for @${customUsername}`);
+      pendingSaveCredentials = null;
+    }
+
     if (!pollingTimer) {
       pollingTimer = setInterval(pollInbox, POLL_INTERVAL);
     }
@@ -150,6 +158,7 @@ async function startBot(customUsername, customPassword) {
     console.error('💥 Initialization error:', err.message);
     botStats.status = 'error';
     botStats.error = err.message;
+    pendingSaveCredentials = null;
     return false;
   }
 }
@@ -158,6 +167,13 @@ async function startBot(customUsername, customPassword) {
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Serve background image asset
+app.get('/anime-bg.jpg', (req, res) => {
+  res.sendFile(path.join(__dirname, 'anime-bg.jpg'));
+});
+
+// Admin portal router
 app.use(adminRouter);
 if (typeof adminRouter.setStartBotHandler === 'function') {
   adminRouter.setStartBotHandler(startBot);
@@ -170,283 +186,446 @@ app.get('/', (req, res) => {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>📸 Insta-Bot | Smart Multi-Persona DM Auto-Reply</title>
+<title>VIHUHUHU KA AAIRA BOT (INSTAGRAM)</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  * { box-sizing: border-box; }
   body {
-    background: #09090e;
-    color: #e2e8f0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
     min-height: 100vh;
-    padding: 20px 14px;
-    background-image: radial-gradient(circle at 10% 20%, rgba(131, 58, 180, 0.18) 0%, transparent 40%),
-                      radial-gradient(circle at 90% 80%, rgba(253, 29, 29, 0.15) 0%, transparent 40%);
+    color: #f5f5f5;
+    font-family: 'Trebuchet MS', 'Segoe UI', Arial, sans-serif;
+    background: linear-gradient(rgba(0,0,0,.38), rgba(0,0,0,.52)),
+                url('/anime-bg.jpg') center center / cover fixed,
+                radial-gradient(ellipse at top, #3b3b3b 0, #090909 48%, #000 100%);
+    background-color: #050505;
   }
-  .container { max-width: 900px; margin: 0 auto; }
-  header {
-    text-align: center;
-    padding: 18px 0 22px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    margin-bottom: 20px;
+  body:before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(110deg, transparent 35%, rgba(255,255,255,.04) 50%, transparent 65%);
   }
-  h1 {
-    font-size: 28px;
-    font-weight: 800;
-    background: linear-gradient(135deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+
+  .wrap {
+    width: min(960px, 94%);
+    margin: 25px auto;
+  }
+
+  /* Metallic Glowing Headers */
+  .logo {
+    font-size: 34px;
+    font-weight: 900;
+    letter-spacing: 5px;
+    text-shadow: 0 0 18px #ddd;
+    background: linear-gradient(110deg, #ffffff 0%, #d8d8d8 38%, #8e8e8e 68%, #ffffff 100%);
     -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    letter-spacing: -0.5px;
+    background-clip: text;
+    color: transparent;
   }
-  .subtitle { color: #94a3b8; font-size: 13px; margin-top: 6px; }
+  h1, h2, h3 {
+    margin: 0 0 10px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    background: linear-gradient(110deg, #ffffff 0%, #d8d8d8 38%, #8e8e8e 68%, #ffffff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 16px rgba(255, 255, 255, 0.25);
+  }
+  .subtitle {
+    color: #aaa;
+    letter-spacing: 2px;
+    font-size: 13px;
+    margin-top: 6px;
+    font-weight: 600;
+  }
+
+  /* Metallic Glassmorphism Panel */
+  .panel {
+    background: linear-gradient(145deg, rgba(8,8,8,.75), rgba(22,22,22,.68));
+    border: 1px solid #555555;
+    border-radius: 18px;
+    padding: 22px;
+    margin: 16px 0;
+    box-shadow: 0 8px 28px #0009, 0 0 14px rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(12px);
+    transition: border-color .2s;
+  }
+  .panel:hover {
+    border-color: #c8c8c8;
+  }
+
+  /* Form Elements */
+  input, select, textarea {
+    width: 100%;
+    background: rgba(5,5,5,.75);
+    color: white;
+    border: 1px solid #666;
+    border-radius: 10px;
+    padding: 13px;
+    margin: 6px 0 12px;
+    font-size: 14px;
+    outline: none;
+    font-family: inherit;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: #eee;
+    box-shadow: 0 0 10px #777;
+  }
+
+  /* Buttons */
+  button {
+    background: linear-gradient(135deg, #3d3d3d, #080808);
+    color: #fff;
+    border: 1px solid #aaa;
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    font-family: inherit;
+    transition: transform .15s, border-color .15s, background .15s, color .15s;
+  }
+  button:hover {
+    transform: translateY(-1px);
+    border-color: #f2f2f2;
+    background: linear-gradient(135deg, #777777, #202020);
+    color: #fff;
+    box-shadow: 0 0 14px #aaa;
+  }
+  button:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+    transform: none !important;
+  }
+
+  /* Pills */
+  .pill {
+    display: inline-block;
+    border: 1px solid #777;
+    border-radius: 30px;
+    padding: 5px 14px;
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+  }
+  .pill.green {
+    color: #6ee7b7;
+    border-color: #10b981;
+    background: rgba(16,185,129,0.18);
+  }
+  .pill.red {
+    color: #fca5a5;
+    border-color: #ef4444;
+    background: rgba(239,68,68,0.18);
+  }
+  .pill.yellow {
+    color: #fde047;
+    border-color: #eab308;
+    background: rgba(234,179,8,0.18);
+  }
 
   /* Navigation Tabs */
   .nav-tabs {
     display: flex;
     gap: 8px;
-    margin-bottom: 20px;
-    background: rgba(255, 255, 255, 0.03);
+    margin: 18px 0;
+    background: rgba(10, 10, 10, 0.7);
     padding: 6px;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 14px;
+    border: 1px solid #555;
     overflow-x: auto;
   }
   .tab-btn {
     flex: 1;
-    padding: 10px 14px;
+    padding: 11px 16px;
     background: transparent;
-    border: none;
-    color: #94a3b8;
+    border: 1px solid transparent;
+    color: #bbb;
     font-size: 13px;
-    font-weight: 600;
-    border-radius: 8px;
+    font-weight: 700;
+    border-radius: 10px;
     cursor: pointer;
     white-space: nowrap;
     transition: all 0.2s;
+    font-family: inherit;
+    margin: 0;
+  }
+  .tab-btn:hover {
+    color: #fff;
+    border-color: #777;
   }
   .tab-btn.active {
-    background: linear-gradient(135deg, rgba(230, 104, 60, 0.25), rgba(188, 24, 136, 0.25));
+    background: linear-gradient(135deg, #444, #111);
     color: #fff;
-    border: 1px solid rgba(230, 104, 60, 0.4);
+    border: 1px solid #aaa;
+    box-shadow: 0 0 12px rgba(255,255,255,0.15);
   }
 
   .tab-content { display: none; }
   .tab-content.active { display: block; }
 
-  .card {
-    background: rgba(18, 18, 26, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 16px;
-    padding: 22px;
-    backdrop-filter: blur(12px);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-    margin-bottom: 18px;
+  /* Persona Card Grid */
+  .persona-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
   }
-  h2 { font-size: 16px; font-weight: 700; color: #f8fafc; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
-  .status-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-  
-  .badge {
-    padding: 6px 14px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
+  @media(max-width: 600px) {
+    .persona-grid { grid-template-columns: 1fr; }
   }
-  .badge-active { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
-  .badge-connecting { background: rgba(234, 179, 8, 0.15); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3); }
-  .badge-error { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
-  .badge-idle { background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); }
-
-  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 15px; }
-  @media(max-width: 600px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
-  .stat-box { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05); padding: 12px; border-radius: 10px; text-align: center; }
-  .stat-val { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 2px; }
-  .stat-lbl { font-size: 11px; color: #64748b; text-transform: uppercase; }
-
-  input, select, textarea {
-    width: 100%;
-    background: rgba(10, 10, 15, 0.7);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 10px;
-    padding: 12px 14px;
-    color: #fff;
-    font-size: 14px;
-    margin-bottom: 12px;
-    outline: none;
-    transition: all 0.2s;
-  }
-  input:focus, select:focus, textarea:focus { border-color: #e6683c; box-shadow: 0 0 10px rgba(230, 104, 60, 0.25); }
-
-  button {
-    width: 100%;
-    padding: 12px 16px;
-    border-radius: 10px;
-    border: none;
-    font-size: 14px;
-    font-weight: 700;
+  .persona-box {
+    background: rgba(10, 10, 10, 0.6);
+    border: 1px solid #444;
+    border-radius: 14px;
+    padding: 16px;
     cursor: pointer;
     transition: all 0.2s;
-    background: linear-gradient(135deg, #f09433, #dc2743, #bc1888);
-    color: white;
   }
-  button:hover { opacity: 0.92; transform: translateY(-1px); }
-  button.btn-secondary {
-    background: rgba(255, 255, 255, 0.08);
-    color: #e2e8f0;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+  .persona-box:hover {
+    border-color: #aaa;
+    background: rgba(40, 40, 40, 0.4);
   }
-  button.btn-sm {
-    width: auto;
-    padding: 6px 12px;
+  .persona-box.selected {
+    border-color: #6ee7b7;
+    background: rgba(16, 185, 129, 0.12);
+    box-shadow: 0 0 16px rgba(16, 185, 129, 0.2);
+  }
+  .persona-title {
+    font-weight: 700;
+    font-size: 15px;
+    margin-bottom: 4px;
+    color: #fff;
+  }
+  .persona-desc {
     font-size: 12px;
+    color: #94a3b8;
+    line-height: 1.4;
   }
 
-  .otp-box {
-    margin-top: 15px;
-    padding: 16px;
-    background: rgba(234, 179, 8, 0.1);
-    border: 1px solid rgba(234, 179, 8, 0.3);
-    border-radius: 12px;
-    display: none;
+  /* Table */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-top: 10px;
   }
-  .otp-box.active { display: block; }
-
-  .messages-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; max-height: 420px; overflow-y: auto; }
-  .msg-item {
-    background: rgba(255, 255, 255, 0.03);
-    border-left: 3px solid #dc2743;
-    border-radius: 8px;
+  th, td {
     padding: 12px 14px;
+    text-align: left;
+    border-bottom: 1px solid #333;
+  }
+  th {
+    color: #bbb;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  tr:hover { background: rgba(255, 255, 255, 0.03); }
+
+  /* Chat item */
+  .msg-item {
+    background: rgba(10, 10, 10, 0.7);
+    border: 1px solid #444;
+    border-left: 3px solid #10b981;
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
     font-size: 13px;
   }
-  .msg-header { display: flex; justify-content: space-between; color: #94a3b8; font-size: 12px; margin-bottom: 4px; }
-  .msg-user { font-weight: 700; color: #f87171; }
-  .msg-incoming { color: #f1f5f9; margin-bottom: 6px; }
-  .msg-reply { color: #4ade80; background: rgba(34, 197, 94, 0.08); padding: 6px 10px; border-radius: 6px; }
-
-  /* Persona Card Grid */
-  .persona-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; }
-  @media(max-width: 600px) { .persona-grid { grid-template-columns: 1fr; } }
-  .persona-box {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    padding: 16px;
-    cursor: pointer;
-    transition: all 0.2s;
+  .msg-header {
+    display: flex;
+    justify-content: space-between;
+    color: #888;
+    font-size: 11px;
+    margin-bottom: 6px;
   }
-  .persona-box:hover { border-color: #e6683c; background: rgba(230, 104, 60, 0.06); }
-  .persona-box.selected { border-color: #e6683c; background: rgba(230, 104, 60, 0.15); box-shadow: 0 0 15px rgba(230, 104, 60, 0.2); }
-  .persona-title { font-weight: 700; font-size: 15px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
-  .persona-desc { font-size: 12px; color: #94a3b8; line-height: 1.4; }
-
-  /* User Profiles Table */
-  .user-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
-  .user-table th, .user-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
-  .user-table th { color: #64748b; font-size: 11px; text-transform: uppercase; }
-  .pill-vip { background: rgba(234, 179, 8, 0.15); color: #facc15; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
-  .pill-blocked { background: rgba(239, 68, 68, 0.15); color: #f87171; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
-  .pill-persona { background: rgba(188, 24, 136, 0.15); color: #f472b6; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
-
-  .notice { font-size: 12px; color: #94a3b8; background: rgba(255, 255, 255, 0.03); padding: 12px; border-radius: 8px; margin-top: 15px; text-align: center; }
+  .msg-incoming { color: #f1f5f9; margin-bottom: 6px; }
+  .msg-reply {
+    color: #6ee7b7;
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    padding: 8px 12px;
+    border-radius: 8px;
+    white-space: pre-wrap;
+  }
 </style>
 </head>
 <body>
-<div class="container">
-  <header>
-    <h1>📸 Insta-Bot</h1>
-    <p class="subtitle">Personalized AI Instagram DM Auto-Reply • Multi-Persona • Turso Cloud Memory</p>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- 1. LOGIN GATE: STRICTLY LOCKED UNTIL VALID INSTAGRAM LOGIN   -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<section id="loginGate" style="min-height: 90vh; display: flex; align-items: center; justify-content: center; padding: 20px;">
+  <div class="panel" style="width: min(460px, 100%); margin: 0; text-align: center;">
+    <div class="logo" style="font-size: 30px; letter-spacing: 3px;">VIHUHUHU KA</div>
+    <h2 style="font-size: 24px; margin: 10px 0 6px;">✦ AAIRA BOT (INSTAGRAM) ✦</h2>
+    <p style="font-size: 13px; color: #aaa; margin: 0 0 20px; letter-spacing: 1px;">
+      WELCOME TO AAIRA INSTAGRAM DM BOT
+    </p>
+
+    <div style="border-top: 1px solid #444; padding-top: 18px; text-align: left;">
+      <h3 style="font-size: 15px; margin-bottom: 8px;">🔐 INSTAGRAM ACCOUNT LOGIN</h3>
+      <p style="font-size: 12px; color: #999; line-height: 1.5; margin-bottom: 16px;">
+        Instagram username aur password enter karein. Instagram par live login verify hone ke baad hi dashboard khulega aur credentials database me save honge.
+      </p>
+
+      <div id="savedCredsBanner" style="display: none; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 12px; color: #6ee7b7;">
+        🔒 <strong>Saved Credentials Found:</strong> Previous verified credentials loaded. Click <em>LOGIN & UNLOCK DASHBOARD</em> to reconnect.
+      </div>
+
+      <label style="font-size: 12px; color: #ddd; font-weight: bold;">Instagram Username</label>
+      <input type="text" id="gateUser" placeholder="Instagram Username (e.g. your_handle)" autocomplete="username" />
+
+      <label style="font-size: 12px; color: #ddd; font-weight: bold; margin-top: 4px; display: block;">Instagram Password</label>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <input type="password" id="gatePass" placeholder="Instagram Password" autocomplete="current-password" style="margin: 6px 0 12px; flex: 1;" />
+        <button type="button" onclick="togglePassVisibility('gatePass')" style="padding: 12px 14px; margin: 6px 0 12px;" title="Show/Hide Password">👁️</button>
+      </div>
+
+      <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #cbd5e1; margin: 4px 0 16px; cursor: pointer;">
+        <input type="checkbox" id="gateSaveCreds" checked style="width: auto; margin: 0; cursor: pointer;" />
+        <span>Save credentials in database & .env permanently</span>
+      </label>
+
+      <button type="button" id="gateLoginBtn" onclick="doGateLogin()" style="width: 100%; margin: 4px 0; padding: 14px; font-size: 15px; letter-spacing: 1px;">
+        🚀 LOGIN & UNLOCK DASHBOARD
+      </button>
+
+      <div id="gateError" style="display: none; background: rgba(220,38,38,0.2); border: 1px solid #ef4444; border-radius: 10px; padding: 12px; margin-top: 14px; color: #fca5a5; font-size: 13px; line-height: 1.5;"></div>
+
+      <!-- OTP Challenge Box -->
+      <div id="gateOtpBox" style="display: none; background: rgba(234,179,8,0.15); border: 1px solid #eab308; border-radius: 12px; padding: 16px; margin-top: 16px;">
+        <p style="color: #fde047; font-size: 13px; font-weight: bold; margin-bottom: 8px;" id="gateOtpPrompt">
+          📩 OTP verification code requested by Instagram!
+        </p>
+        <input type="text" id="gateOtpCode" placeholder="Enter 6-digit OTP code" style="margin-bottom: 10px;" />
+        <button type="button" onclick="submitGateOtp()" style="width: 100%;">SUBMIT OTP CODE</button>
+      </div>
+
+      <div style="margin-top: 20px; text-align: center;">
+        <a href="/admin" style="color: #888; font-size: 12px; text-decoration: none; border-bottom: 1px dashed #555; padding-bottom: 2px;">
+          🛡️ Owner Admin Portal Login →
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- 2. MAIN DASHBOARD: UNLOCKED ONLY AFTER SUCCESSFUL LOGIN     -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="dashboardWrap" class="wrap" style="display: none;">
+  <!-- Header -->
+  <header style="text-align: center; padding: 20px 10px 10px;">
+    <div class="logo">VIHUHUHU KA</div>
+    <h1 style="font-size: 28px; margin: 10px 0 6px;">✦ AAIRA BOT (INSTAGRAM) ✦</h1>
+    <div class="subtitle">VIHUHUHU KA INSTAGRAM DM ASSISTANT</div>
+    <div style="max-width: 480px; margin: 16px auto 0; display: flex; gap: 8px; flex-wrap: wrap;">
+      <a href="/admin" role="button" style="flex: 1; text-align: center; text-decoration: none; background: rgba(25, 20, 20, 0.7); color: #f87171; border: 1px solid #7f1d1d; border-radius: 10px; padding: 11px 14px; font-weight: bold; font-size: 13px;">🛡️ ADMIN PORTAL</a>
+      <button type="button" onclick="disconnectAccount()" style="flex: 1; margin: 0; background: rgba(40,10,10,0.6); border-color: #7f1d1d; color: #fca5a5; font-size: 13px;">🚪 DISCONNECT INSTAGRAM</button>
+    </div>
   </header>
+
+  <!-- Panel: Instagram Connection & Bot Controls (Identical Parity to wa-bot) -->
+  <section class="panel">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+      <h2 style="margin: 0; font-size: 17px;">INSTAGRAM CONNECTION</h2>
+      <span id="connectionPill" class="pill green">Connected ✅</span>
+    </div>
+
+    <div id="accountInfoBox" style="margin-top: 14px; background: rgba(10,10,10,0.7); padding: 14px; border-radius: 12px; border-left: 3px solid #10b981;">
+      <div style="font-size: 15px; color: #6ee7b7; font-weight: bold;" id="igAccountName">@loading...</div>
+      <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;" id="igAccountMeta">Strictly listening and replying to incoming Direct Messages (DMs)</div>
+    </div>
+
+    <!-- Status rows with pills -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
+      <span>Bot Status</span>
+      <span id="botStatusPill" class="pill green">Active</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+      <span>Auto Reply</span>
+      <span id="autoReplyPill" class="pill green">Active</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+      <span>Groq AI Engine</span>
+      <span id="groqAiPill" class="pill green">Active</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+      <span>Saved Rules Engine</span>
+      <span id="savedRulesPill" class="pill green">Active</span>
+    </div>
+
+    <!-- Quick action buttons -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 18px;">
+      <button type="button" onclick="setSetting('bot_active', true)">BOT ON</button>
+      <button type="button" onclick="setSetting('bot_active', false)">BOT OFF</button>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+      <button type="button" onclick="setSetting('auto_reply_enabled', true)">AUTO-REPLY ON</button>
+      <button type="button" onclick="setSetting('auto_reply_enabled', false)">AUTO-REPLY OFF</button>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+      <button type="button" onclick="setSetting('groq_ai_enabled', true)">GROQ AI ON</button>
+      <button type="button" onclick="setSetting('groq_ai_enabled', false)">GROQ AI OFF</button>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+      <button type="button" onclick="setSetting('saved_model_enabled', true)">SAVED RULES ON</button>
+      <button type="button" onclick="setSetting('saved_model_enabled', false)">SAVED RULES OFF</button>
+    </div>
+    <button onclick="refreshStatus()" style="width: 100%; margin: 8px 0 0;">↻ REFRESH STATUS</button>
+  </section>
+
+  <!-- 4 KPI Stat Boxes -->
+  <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 16px 0;">
+    <div class="panel" style="margin: 0; padding: 14px; text-align: center;">
+      <div style="font-size: 22px; font-weight: 800; color: #fff;" id="statReplies">0</div>
+      <div style="font-size: 11px; color: #aaa; text-transform: uppercase;">Replies Sent</div>
+    </div>
+    <div class="panel" style="margin: 0; padding: 14px; text-align: center;">
+      <div style="font-size: 22px; font-weight: 800; color: #fff;" id="statUsers">0</div>
+      <div style="font-size: 11px; color: #aaa; text-transform: uppercase;">Active Users</div>
+    </div>
+    <div class="panel" style="margin: 0; padding: 14px; text-align: center;">
+      <div style="font-size: 22px; font-weight: 800; color: #fff;" id="statLeads">0</div>
+      <div style="font-size: 11px; color: #aaa; text-transform: uppercase;">Leads Captured</div>
+    </div>
+    <div class="panel" style="margin: 0; padding: 14px; text-align: center;">
+      <div style="font-size: 22px; font-weight: 800; color: #4ade80;" id="statDb">Connected</div>
+      <div style="font-size: 11px; color: #aaa; text-transform: uppercase;">Turso DB</div>
+    </div>
+  </div>
 
   <!-- Navigation Tabs -->
   <div class="nav-tabs">
-    <button class="tab-btn active" onclick="switchTab('overview')">📊 Overview & Live DMs</button>
+    <button class="tab-btn active" onclick="switchTab('overview')">💬 Live DMs Stream</button>
     <button class="tab-btn" onclick="switchTab('personas')">🎭 Persona Studio (Moods)</button>
     <button class="tab-btn" onclick="switchTab('users')">👥 User Customization & Leads</button>
     <button class="tab-btn" onclick="switchTab('sender')">✉️ Manual Direct DM</button>
-    <a href="/admin" class="tab-btn" style="text-decoration:none; text-align:center; background: rgba(220, 39, 67, 0.15); color: #f87171; border: 1px solid rgba(220, 39, 67, 0.3);">🛡️ Admin Portal</a>
   </div>
 
-  <!-- TAB 1: OVERVIEW & LIVE DMS -->
+  <!-- TAB 1: LIVE DMS -->
   <div id="tab-overview" class="tab-content active">
-    <!-- Status Card -->
-    <div class="card">
-      <div class="status-row">
-        <h2>⚡ Bot Status</h2>
-        <span id="botBadge" class="badge badge-idle">Checking...</span>
-      </div>
-      <div id="accountInfo" style="font-size: 14px; color: #cbd5e1; margin-bottom: 10px;">
-        Account: <strong id="igUser">Not Connected</strong>
-      </div>
-      <div class="stat-grid">
-        <div class="stat-box">
-          <div class="stat-val" id="statReplies">0</div>
-          <div class="stat-lbl">Replies Sent</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-val" id="statUsers">0</div>
-          <div class="stat-lbl">Active Users</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-val" id="statLeads">0</div>
-          <div class="stat-lbl">Leads Captured</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-val" id="statDb">Connected</div>
-          <div class="stat-lbl">Turso DB</div>
-        </div>
-      </div>
-      <div style="margin-top: 15px; display: flex; gap: 10px;">
-        <button id="toggleBtn" class="btn-secondary" onclick="toggleBot()">Pause Bot</button>
-      </div>
-    </div>
-
-    <!-- Login / Connect Card -->
-    <div class="card" id="loginCard">
-      <h2>🔐 Connect Instagram Account</h2>
-      <p style="font-size: 13px; color: #94a3b8; margin-bottom: 12px;">Login credentials are encrypted and stored in your private .env and Turso DB.</p>
-      
-      <div id="savedCredsNotice" style="display: none; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; color: #6ee7b7;">
-        🔒 <strong>Password Saved:</strong> Account credentials are saved. Click <em>Connect with Saved Credentials</em> to login instantly without retyping.
-      </div>
-
-      <input type="text" id="usernameInput" placeholder="Instagram Username" />
-      <input type="password" id="passwordInput" placeholder="Instagram Password" />
-      
-      <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #cbd5e1; margin: 10px 0 14px 0; cursor: pointer;">
-        <input type="checkbox" id="saveCredsCheck" checked style="width: auto; margin: 0; cursor: pointer;" />
-        <span>Save credentials permanently (Auto-reconnect on restart)</span>
-      </label>
-
-      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-        <button id="connectBtn" onclick="connectAccount()" style="flex: 1;">Connect & Start Bot</button>
-        <button id="clearCredsBtn" onclick="clearCredentials()" class="btn-secondary" style="display: none; background: #dc2626; border-color: #b91c1c; color: #fff;">Clear Saved Password</button>
-      </div>
-
-      <!-- OTP Modal / Box -->
-      <div class="otp-box" id="otpBox">
-        <p style="color: #facc15; font-size: 13px; font-weight: 600; margin-bottom: 8px;" id="otpPrompt">
-          📩 OTP verification code requested!
-        </p>
-        <input type="text" id="otpCodeInput" placeholder="Enter 6-digit OTP code" />
-        <button onclick="submitOtp()">Submit OTP Code</button>
-      </div>
-    </div>
-
-    <!-- Recent Auto-Replied DMs -->
-    <div class="card">
+    <div class="panel">
       <h2>💬 Recent Auto-Replied DMs (Live from Turso DB)</h2>
-      <div class="messages-list" id="messagesList">
-        <p style="color: #64748b; font-size: 13px; text-align: center; padding: 20px;">No messages received yet.</p>
+      <p style="font-size: 12px; color: #aaa; margin-bottom: 12px;">Direct incoming messages and intelligent AI/rule replies:</p>
+      <div id="messagesList" style="max-height: 480px; overflow-y: auto;">
+        <p style="color: #888; font-size: 13px; text-align: center; padding: 20px;">No messages received yet.</p>
       </div>
     </div>
   </div>
 
   <!-- TAB 2: PERSONA STUDIO -->
   <div id="tab-personas" class="tab-content">
-    <div class="card">
+    <div class="panel">
       <h2>🎭 Choose AI Personality (Global Mood)</h2>
-      <p style="font-size: 13px; color: #94a3b8; margin-bottom: 16px;">
-        Select how your AI assistant speaks to people in DMs by default:
+      <p style="font-size: 13px; color: #aaa; margin-bottom: 16px;">
+        Select how AAIRA speaks to users in Instagram DMs by default:
       </p>
 
       <div class="persona-grid">
@@ -468,20 +647,23 @@ app.get('/', (req, res) => {
         </div>
       </div>
 
-      <button onclick="savePersona()">Save Active Persona</button>
+      <button onclick="savePersona()" style="width: 100%;">SAVE ACTIVE PERSONA</button>
     </div>
   </div>
 
   <!-- TAB 3: USERS & LEADS -->
   <div id="tab-users" class="tab-content">
-    <div class="card">
-      <h2>👥 User Customization & Captured Leads</h2>
-      <p style="font-size: 13px; color: #94a3b8; margin-bottom: 14px;">
-        Har user ke liye alag mood set karein, VIP mark karein, ya auto-captured phone numbers aur emails check karein:
+    <div class="panel">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px;">
+        <h2 style="margin: 0;">👥 User Customization & Captured Leads</h2>
+        <button onclick="exportInstaUsersCsv()" style="padding: 8px 14px; font-size: 12px; margin: 0;">📥 Export CSV</button>
+      </div>
+      <p style="font-size: 12px; color: #aaa; margin-bottom: 14px;">
+        Har user ke liye custom mood set karein, VIP mark karein, ya auto-captured contact numbers aur emails dekhein:
       </p>
 
       <div style="overflow-x: auto;">
-        <table class="user-table">
+        <table>
           <thead>
             <tr>
               <th>Username</th>
@@ -492,49 +674,59 @@ app.get('/', (req, res) => {
             </tr>
           </thead>
           <tbody id="userTableBody">
-            <tr><td colspan="5" style="text-align: center; color: #64748b;">Loading user profiles...</td></tr>
+            <tr><td colspan="5" style="text-align: center; color: #888;">Loading user profiles...</td></tr>
           </tbody>
         </table>
       </div>
     </div>
   </div>
 
-  <!-- TAB 4: MANUAL DIRECT DM -->
+  <!-- TAB 4: MANUAL DIRECT DM SENDER -->
   <div id="tab-sender" class="tab-content">
-    <div class="card">
+    <div class="panel">
       <h2>✉️ Send Manual Direct Message (DM)</h2>
-      <p style="font-size: 13px; color: #94a3b8; margin-bottom: 14px;">
-        Aap seedha is dashboard se kisi bhi Instagram user ko DM bhej sakte hain:
+      <p style="font-size: 12px; color: #aaa; margin-bottom: 14px;">
+        Aap seedha is dashboard se kisi bhi Instagram user ko instant DM bhej sakte hain:
       </p>
 
-      <input type="text" id="targetUserInput" placeholder="Recipient Instagram Username (without @)" />
-      <textarea id="targetMessageInput" rows="3" placeholder="Type your message here..."></textarea>
-      <button onclick="sendManualDm()">Send DM Now</button>
-      <div id="sendResult" style="margin-top: 10px; font-size: 13px;"></div>
-    </div>
-  </div>
+      <label style="font-size: 12px; color: #ddd; font-weight: bold;">Recipient Instagram Username</label>
+      <input type="text" id="targetUserInput" placeholder="Instagram username (without @)" />
 
-  <div class="notice">
-    🔒 <strong>Strict Policy:</strong> Bot strictly operates on Direct Messages only. No follow, like, or story viewing actions.
+      <label style="font-size: 12px; color: #ddd; font-weight: bold; margin-top: 4px; display: block;">Message Text</label>
+      <textarea id="targetMessageInput" rows="3" placeholder="Type your direct message here..."></textarea>
+
+      <button onclick="sendManualDm()" style="width: 100%;">SEND DM NOW</button>
+      <div id="sendResult" style="margin-top: 12px; font-size: 13px;"></div>
+    </div>
   </div>
 </div>
 
 <script>
 let currentGlobalPersona = 'sweet';
+let cachedUsers = [];
+
+function togglePassVisibility(id) {
+  const inp = document.getElementById(id);
+  if (!inp) return;
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
 
 function switchTab(tabId) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-  document.getElementById('tab-' + tabId).classList.add('active');
-  event.target.classList.add('active');
-
+  const target = document.getElementById('tab-' + tabId);
+  if (target) target.classList.add('active');
+  if (event && event.target && event.target.classList.contains('tab-btn')) {
+    event.target.classList.add('active');
+  }
   if (tabId === 'users') loadProfiles();
 }
 
 function selectPersona(type) {
   currentGlobalPersona = type;
   document.querySelectorAll('.persona-box').forEach(b => b.classList.remove('selected'));
-  document.getElementById('persona-' + type).classList.add('selected');
+  const el = document.getElementById('persona-' + type);
+  if (el) el.classList.add('selected');
 }
 
 async function savePersona() {
@@ -546,82 +738,167 @@ async function savePersona() {
   alert('Active persona updated to: ' + currentGlobalPersona);
 }
 
+async function setSetting(key, value) {
+  try {
+    await fetch('/api/setting/set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value })
+    });
+    refreshStatus();
+  } catch (err) {
+    alert('Error updating setting: ' + err.message);
+  }
+}
+
 async function refreshStatus() {
   try {
     const res = await fetch('/api/status');
     const data = await res.json();
-    
-    const badge = document.getElementById('botBadge');
-    badge.className = 'badge';
-    if (data.status === 'active') {
-      badge.textContent = 'Online & Active';
-      badge.classList.add('badge-active');
-    } else if (data.status === 'connecting') {
-      badge.textContent = 'Connecting...';
-      badge.classList.add('badge-connecting');
-    } else if (data.status === 'error') {
-      badge.textContent = 'Error: ' + (data.error || 'Check credentials');
-      badge.classList.add('badge-error');
+
+    const isLoggedIn = Boolean(data.isLoggedIn || (data.status === 'active' && data.account));
+
+    const gate = document.getElementById('loginGate');
+    const dash = document.getElementById('dashboardWrap');
+
+    if (isLoggedIn) {
+      if (gate) gate.style.display = 'none';
+      if (dash) dash.style.display = 'block';
+
+      // Update Dashboard Info
+      const acc = data.account ? '@' + data.account : 'Connected';
+      document.getElementById('igAccountName').textContent = acc;
+      document.getElementById('connectionPill').textContent = acc + ' ✅';
+      document.getElementById('connectionPill').className = 'pill green';
+
+      // Update Status Pills
+      function updatePill(id, active) {
+        const p = document.getElementById(id);
+        if (!p) return;
+        p.textContent = active ? 'Active' : 'Inactive';
+        p.className = 'pill ' + (active ? 'green' : 'red');
+      }
+      updatePill('botStatusPill', data.botActive !== false);
+      updatePill('autoReplyPill', data.autoReplyEnabled !== false);
+      updatePill('groqAiPill', data.groqAiEnabled !== false);
+      updatePill('savedRulesPill', data.savedModelEnabled !== false);
+
+      // KPI Stats
+      document.getElementById('statReplies').textContent = data.totalReplies || 0;
+      document.getElementById('statUsers').textContent = data.totalUsers || 0;
+      document.getElementById('statLeads').textContent = data.capturedLeads || 0;
+
+      if (data.globalPersona) selectPersona(data.globalPersona);
     } else {
-      badge.textContent = 'Idle';
-      badge.classList.add('badge-idle');
+      if (gate) gate.style.display = 'flex';
+      if (dash) dash.style.display = 'none';
+
+      // Pre-fill username if available
+      const gateUser = document.getElementById('gateUser');
+      if (gateUser && !gateUser.value && data.savedUsername) {
+        gateUser.value = data.savedUsername;
+      }
+
+      const banner = document.getElementById('savedCredsBanner');
+      if (banner) {
+        banner.style.display = data.hasSavedPassword ? 'block' : 'none';
+      }
+
+      // OTP Box handling
+      const otpBox = document.getElementById('gateOtpBox');
+      if (otpBox) {
+        if (data.pendingOtp) {
+          otpBox.style.display = 'block';
+          document.getElementById('gateOtpPrompt').textContent = '📩 ' + (data.pendingOtp.prompt || 'OTP Verification Code required');
+        } else {
+          otpBox.style.display = 'none';
+        }
+      }
     }
+  } catch (e) {}
+}
 
-    document.getElementById('igUser').textContent = data.account ? '@' + data.account : 'Not Connected';
-    document.getElementById('statReplies').textContent = data.totalReplies || 0;
-    document.getElementById('statUsers').textContent = data.totalUsers || 0;
-    document.getElementById('statLeads').textContent = data.capturedLeads || 0;
+async function doGateLogin() {
+  const username = document.getElementById('gateUser').value.trim();
+  const password = document.getElementById('gatePass').value.trim();
+  const saveCheck = document.getElementById('gateSaveCreds');
+  const saveCredentials = saveCheck ? saveCheck.checked : true;
+  const errBox = document.getElementById('gateError');
+  const btn = document.getElementById('gateLoginBtn');
 
-    const toggleBtn = document.getElementById('toggleBtn');
-    toggleBtn.textContent = data.botActive ? 'Pause Bot' : 'Resume Bot';
+  if (errBox) errBox.style.display = 'none';
 
-    const otpBox = document.getElementById('otpBox');
-    if (data.pendingOtp) {
-      otpBox.classList.add('active');
-      document.getElementById('otpPrompt').textContent = '📩 ' + data.pendingOtp.prompt;
+  if (!username) {
+    if (errBox) {
+      errBox.textContent = '❌ Instagram Username daalna zaroori hai!';
+      errBox.style.display = 'block';
+    }
+    return;
+  }
+  if (!password) {
+    if (errBox) {
+      errBox.textContent = '❌ Instagram Password daalna zaroori hai!';
+      errBox.style.display = 'block';
+    }
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Instagram se connect ho raha hai... (Please wait)';
+
+  try {
+    const res = await fetch('/api/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, saveCredentials })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      if (errBox) {
+        errBox.textContent = '❌ ' + (data.error || 'Instagram login fail ho gaya. Kripya username aur password check karein.');
+        errBox.style.display = 'block';
+      }
     } else {
-      otpBox.classList.remove('active');
+      await refreshStatus();
     }
-
-    if (data.globalPersona) {
-      selectPersona(data.globalPersona);
+  } catch (err) {
+    if (errBox) {
+      errBox.textContent = '❌ Connection error: ' + err.message;
+      errBox.style.display = 'block';
     }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🚀 LOGIN & UNLOCK DASHBOARD';
+    refreshStatus();
+  }
+}
 
-    // Credentials status & prefill
-    if (data.savedUsername) {
-      const uInput = document.getElementById('usernameInput');
-      if (uInput && !uInput.value) {
-        uInput.value = data.savedUsername;
-      }
-    }
+async function submitGateOtp() {
+  const code = document.getElementById('gateOtpCode').value.trim();
+  if (!code) {
+    alert('Please enter the OTP verification code');
+    return;
+  }
+  await fetch('/api/submit-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code })
+  });
+  document.getElementById('gateOtpCode').value = '';
+  refreshStatus();
+}
 
-    const pInput = document.getElementById('passwordInput');
-    const notice = document.getElementById('savedCredsNotice');
-    const clearBtn = document.getElementById('clearCredsBtn');
-    const connBtn = document.getElementById('connectBtn');
-
-    if (data.hasSavedPassword) {
-      hasSavedCredentials = true;
-      if (notice) notice.style.display = 'block';
-      if (clearBtn) clearBtn.style.display = 'inline-block';
-      if (pInput && !pInput.value) {
-        pInput.placeholder = '•••••••• (Password Saved - leave blank to use saved)';
-      }
-      if (connBtn && (!pInput || !pInput.value.trim())) {
-        connBtn.textContent = '⚡ Connect with Saved Credentials';
-      }
-    } else {
-      hasSavedCredentials = false;
-      if (notice) notice.style.display = 'none';
-      if (clearBtn) clearBtn.style.display = 'none';
-      if (connBtn && (!pInput || !pInput.value.trim())) {
-        connBtn.textContent = 'Connect & Start Bot';
-      }
-      if (pInput && !pInput.value) {
-        pInput.placeholder = 'Instagram Password';
-      }
-    }
-  } catch(e) {}
+async function disconnectAccount() {
+  if (!confirm('Kya aap sure hain ki Instagram account disconnect aur logout karna chahte hain?')) return;
+  try {
+    await fetch('/api/disconnect', { method: 'POST' });
+    const pInp = document.getElementById('gatePass');
+    if (pInp) pInp.value = '';
+    alert('Instagram account disconnected & logged out successfully!');
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+  refreshStatus();
 }
 
 async function refreshMessages() {
@@ -629,14 +906,15 @@ async function refreshMessages() {
     const res = await fetch('/api/messages');
     const msgs = await res.json();
     const list = document.getElementById('messagesList');
+    if (!list) return;
     if (!msgs || msgs.length === 0) {
-      list.innerHTML = '<p style="color: #64748b; font-size: 13px; text-align: center; padding: 20px;">No messages received yet.</p>';
+      list.innerHTML = '<p style="color: #888; font-size: 13px; text-align: center; padding: 20px;">No messages received yet.</p>';
       return;
     }
     list.innerHTML = msgs.map(m => \`
       <div class="msg-item">
         <div class="msg-header">
-          <span class="msg-user">@\${m.sender_username || 'user'}</span>
+          <span style="font-weight: bold; color: #f87171;">@\${m.sender_username || 'user'}</span>
           <span>\${m.created_at || ''} (\${m.source || 'ai'})</span>
         </div>
         <div class="msg-incoming">📩 \${m.incoming_text}</div>
@@ -650,28 +928,30 @@ async function loadProfiles() {
   try {
     const res = await fetch('/api/profiles');
     const profiles = await res.json();
+    cachedUsers = profiles || [];
     const tbody = document.getElementById('userTableBody');
+    if (!tbody) return;
     if (!profiles || profiles.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 20px;">No user profiles yet. Once people DM you, they will appear here!</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #888; padding: 20px;">No user profiles yet. Once people DM you, they will appear here!</td></tr>';
       return;
     }
     tbody.innerHTML = profiles.map(p => \`
       <tr>
         <td><strong>@\${p.username}</strong> \${p.custom_name ? '(\' + p.custom_name + \')' : ''}</td>
         <td>
-          \${p.is_vip ? '<span class="pill-vip">⭐ VIP</span> ' : ''}
-          \${p.is_blocked ? '<span class="pill-blocked">🚫 Blocked</span>' : '<span style="color:#4ade80;">Active</span>'}
+          \${p.is_vip ? '<span class="pill yellow" style="font-size:10px;">⭐ VIP</span> ' : ''}
+          \${p.is_blocked ? '<span class="pill red" style="font-size:10px;">🚫 Blocked</span>' : '<span class="pill green" style="font-size:10px;">Active</span>'}
         </td>
-        <td><span class="pill-persona">\${p.persona || 'default'}</span></td>
+        <td><span class="pill" style="font-size:10px; border-color:#aaa; color:#ddd;">\${p.persona || 'default'}</span></td>
         <td>
-          \${p.lead_phone ? '📱 ' + p.lead_phone + '<br>' : ''}
-          \${p.lead_email ? '✉️ ' + p.lead_email : ''}
-          \${(!p.lead_phone && !p.lead_email) ? '<span style="color:#64748b;">No lead captured</span>' : ''}
+          \${p.lead_phone ? '📱 <a href="tel:' + p.lead_phone + '" style="color:#6ee7b7;">' + p.lead_phone + '</a><br>' : ''}
+          \${p.lead_email ? '✉️ <a href="mailto:' + p.lead_email + '" style="color:#60a5fa;">' + p.lead_email + '</a>' : ''}
+          \${(!p.lead_phone && !p.lead_email) ? '<span style="color:#666;">No lead</span>' : ''}
         </td>
         <td>
-          <button class="btn-secondary btn-sm" onclick="toggleVip('\${p.username}', \${p.is_vip ? 0 : 1})">\${p.is_vip ? 'Remove VIP' : 'Make VIP'}</button>
-          <button class="btn-secondary btn-sm" onclick="toggleBlock('\${p.username}', \${p.is_blocked ? 0 : 1})">\${p.is_blocked ? 'Unblock' : 'Block'}</button>
-          <button class="btn-secondary btn-sm" onclick="setCustomPersona('\${p.username}')">Set Mood</button>
+          <button style="padding: 6px 10px; font-size: 11px;" onclick="toggleVip('\${p.username}', \${p.is_vip ? 0 : 1})">\${p.is_vip ? 'Remove VIP' : 'Make VIP'}</button>
+          <button style="padding: 6px 10px; font-size: 11px;" onclick="toggleBlock('\${p.username}', \${p.is_blocked ? 0 : 1})">\${p.is_blocked ? 'Unblock' : 'Block'}</button>
+          <button style="padding: 6px 10px; font-size: 11px;" onclick="setCustomPersona('\${p.username}')">Set Mood</button>
         </td>
       </tr>
     \`).join('');
@@ -708,6 +988,30 @@ async function setCustomPersona(username) {
   }
 }
 
+function exportInstaUsersCsv() {
+  const users = cachedUsers || [];
+  const rows = [
+    ['Username', 'Custom Name', 'Persona', 'VIP', 'Blocked', 'Phone', 'Email', 'Notes'],
+    ...users.map(u => [
+      u.username,
+      u.custom_name || '',
+      u.persona || 'sweet',
+      u.is_vip ? 'Yes' : 'No',
+      u.is_blocked ? 'Yes' : 'No',
+      u.lead_phone || '',
+      u.lead_email || '',
+      u.notes || ''
+    ])
+  ];
+  const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\\r\\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'insta-users-leads.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 async function sendManualDm() {
   const username = document.getElementById('targetUserInput').value.trim();
   const text = document.getElementById('targetMessageInput').value.trim();
@@ -718,7 +1022,7 @@ async function sendManualDm() {
     return;
   }
 
-  resDiv.style.color = '#facc15';
+  resDiv.style.color = '#fde047';
   resDiv.textContent = 'Sending message to @' + username + '...';
 
   try {
@@ -729,120 +1033,25 @@ async function sendManualDm() {
     });
     const data = await res.json();
     if (data.success) {
-      resDiv.style.color = '#4ade80';
+      resDiv.style.color = '#6ee7b7';
       resDiv.textContent = '✅ Message sent successfully!';
       document.getElementById('targetMessageInput').value = '';
       refreshMessages();
     } else {
-      resDiv.style.color = '#f87171';
+      resDiv.style.color = '#fca5a5';
       resDiv.textContent = '❌ ' + (data.error || 'Failed to send message');
     }
   } catch(e) {
-    resDiv.style.color = '#f87171';
+    resDiv.style.color = '#fca5a5';
     resDiv.textContent = '❌ Error: ' + e.message;
   }
 }
 
-let hasSavedCredentials = false;
-
-async function connectAccount() {
-  const username = document.getElementById('usernameInput').value.trim();
-  const password = document.getElementById('passwordInput').value.trim();
-  const saveCheck = document.getElementById('saveCredsCheck');
-  const saveCredentials = saveCheck ? saveCheck.checked : true;
-
-  if (!username && !hasSavedCredentials) {
-    alert('Please enter your Instagram username');
-    return;
-  }
-  if (!password && !hasSavedCredentials) {
-    alert('Please enter your Instagram password');
-    return;
-  }
-
-  const btn = document.getElementById('connectBtn');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'Connecting...';
-  }
-
-  try {
-    const res = await fetch('/api/connect', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password, saveCredentials })
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      alert(data.error || 'Connection failed');
-    }
-  } catch (err) {
-    alert('Connection error: ' + err.message);
-  } finally {
-    if (btn) btn.disabled = false;
-    refreshStatus();
-  }
-}
-
-async function clearCredentials() {
-  if (!confirm('Are you sure you want to remove the saved Instagram credentials?')) return;
-  try {
-    await fetch('/api/credentials/clear', { method: 'POST' });
-    document.getElementById('usernameInput').value = '';
-    document.getElementById('passwordInput').value = '';
-    document.getElementById('passwordInput').placeholder = 'Instagram Password';
-    const notice = document.getElementById('savedCredsNotice');
-    if (notice) notice.style.display = 'none';
-    const clearBtn = document.getElementById('clearCredsBtn');
-    if (clearBtn) clearBtn.style.display = 'none';
-    const connBtn = document.getElementById('connectBtn');
-    if (connBtn) connBtn.textContent = 'Connect & Start Bot';
-    hasSavedCredentials = false;
-    alert('Saved credentials removed!');
-  } catch (err) {
-    alert('Error clearing credentials: ' + err.message);
-  }
-  refreshStatus();
-}
-
-const passInputElem = document.getElementById('passwordInput');
-if (passInputElem) {
-  passInputElem.addEventListener('input', (e) => {
-    const connBtn = document.getElementById('connectBtn');
-    if (connBtn) {
-      if (e.target.value.trim().length > 0) {
-        connBtn.textContent = hasSavedCredentials ? 'Connect & Update Password' : 'Connect & Start Bot';
-      } else if (hasSavedCredentials) {
-        connBtn.textContent = '⚡ Connect with Saved Credentials';
-      }
-    }
-  });
-}
-
-async function submitOtp() {
-  const code = document.getElementById('otpCodeInput').value.trim();
-  if (!code) {
-    alert('Please enter OTP code');
-    return;
-  }
-  await fetch('/api/submit-otp', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code })
-  });
-  document.getElementById('otpCodeInput').value = '';
-  refreshStatus();
-}
-
-async function toggleBot() {
-  await fetch('/api/toggle', { method: 'POST' });
-  refreshStatus();
-}
-
-setInterval(refreshStatus, 4000);
-setInterval(refreshMessages, 6000);
+// Initial status load and interval timers
 refreshStatus();
 refreshMessages();
+setInterval(refreshStatus, 4000);
+setInterval(refreshMessages, 6000);
 </script>
 </body>
 </html>`);
@@ -859,13 +1068,18 @@ app.get('/api/status', async (req, res) => {
   const groqAiEnabled = (await db.getSetting('groq_ai_enabled', 'true')) === 'true';
   const savedModelEnabled = (await db.getSetting('saved_model_enabled', 'true')) === 'true';
 
+  const isLoggedIn = Boolean(igManager.isLoggedIn && igManager.currentUser);
+
   res.json({
-    status: botStats.status,
+    status: isLoggedIn ? 'active' : botStats.status,
+    isLoggedIn,
     botActive: isBotActive,
     autoReplyEnabled,
     groqAiEnabled,
     savedModelEnabled,
-    account: igManager.currentUser ? igManager.currentUser.username : (credInfo.username || null),
+    account: igManager.currentUser ? igManager.currentUser.username : null,
+    accountFullName: igManager.currentUser ? (igManager.currentUser.full_name || '') : '',
+    accountPk: igManager.currentUser ? String(igManager.currentUser.pk) : '',
     savedUsername: credInfo.username,
     hasSavedPassword: credInfo.hasSavedPassword,
     totalReplies: dbStats.totalReplies,
@@ -904,6 +1118,7 @@ app.post('/api/persona', async (req, res) => {
   res.json({ success: true, persona });
 });
 
+// STRICT LOGIN GATE: Only save credentials if login actually succeeds!
 app.post('/api/connect', async (req, res) => {
   let { username, password, saveCredentials = true } = req.body;
   const credInfo = await creds.getCredentials();
@@ -912,15 +1127,59 @@ app.post('/api/connect', async (req, res) => {
   if (!password) password = credInfo.password;
 
   if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password required' });
+    return res.status(400).json({
+      success: false,
+      error: 'Instagram Username aur Password dono daalna zaroori hai!'
+    });
   }
 
+  // Set pendingSaveCredentials so startBot will persist ONLY if login succeeds
   if (saveCredentials) {
-    await creds.saveCredentials(username, password);
+    pendingSaveCredentials = { username, password };
+  } else {
+    pendingSaveCredentials = null;
   }
 
-  startBot(username, password);
-  res.json({ success: true, message: 'Login started', saved: Boolean(saveCredentials) });
+  try {
+    const success = await startBot(username, password);
+    if (!success) {
+      return res.status(401).json({
+        success: false,
+        error: botStats.error || 'Instagram login fail ho gaya. Kripya apna username aur password check karein.'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Instagram login successful!',
+      account: igManager.currentUser ? igManager.currentUser.username : username
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Login failed'
+    });
+  }
+});
+
+// Disconnect Instagram Account completely
+app.post('/api/disconnect', async (req, res) => {
+  try {
+    if (pollingTimer) {
+      clearInterval(pollingTimer);
+      pollingTimer = null;
+    }
+    isPolling = false;
+    ig = null;
+    botUserId = null;
+    botStats.status = 'idle';
+    botStats.error = null;
+    await creds.clearCredentials();
+    await igManager.logout();
+    res.json({ success: true, message: 'Instagram account disconnected & logged out' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/credentials/clear', async (req, res) => {
@@ -949,6 +1208,13 @@ app.post('/api/toggle', async (req, res) => {
   await db.setSetting('bot_active', String(next));
   botActive = next;
   res.json({ botActive: next });
+});
+
+app.post('/api/setting/set', async (req, res) => {
+  const { key, value } = req.body;
+  if (!key) return res.status(400).json({ error: 'Key required' });
+  await db.setSetting(key, String(value));
+  res.json({ success: true, key, value });
 });
 
 app.post('/api/setting/toggle', async (req, res) => {
