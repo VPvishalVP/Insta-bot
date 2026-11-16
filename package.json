@@ -3,12 +3,16 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "Instagram DM Auto-Reply Bot with Multi-Persona AI and Turso DB",
   "dependencies": {
     "@libsql/client": "^0.18.0",
     "dotenv": "^18.0.10",

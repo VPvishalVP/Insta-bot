@@ -31,7 +31,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * Does NOT like, follow, comment, view stories or perform any other action.
  */
 async function processThread(thread) {
-  if (!botActive) return;
+  const isBotActive = (await db.getSetting('bot_active', 'true')) === 'true';
+  if (!isBotActive) return;
+  const isAutoReply = (await db.getSetting('auto_reply_enabled', 'true')) === 'true';
+  if (!isAutoReply) return;
   if (!thread || !Array.isArray(thread.items) || thread.items.length === 0) return;
 
   const latestItem = thread.items[0];
@@ -97,7 +100,8 @@ async function processThread(thread) {
 }
 
 async function pollInbox() {
-  if (!botActive || isPolling || !ig || !igManager.isLoggedIn) return;
+  const isBotActive = (await db.getSetting('bot_active', 'true')) === 'true';
+  if (!isBotActive || isPolling || !ig || !igManager.isLoggedIn) return;
   isPolling = true;
 
   try {
@@ -850,10 +854,17 @@ app.get('/api/status', async (req, res) => {
   const pendingOtp = igManager.isOtpPending();
   const globalPersona = await db.getSetting('global_persona', 'sweet');
   const credInfo = await creds.getCredentials();
+  const isBotActive = (await db.getSetting('bot_active', 'true')) === 'true';
+  const autoReplyEnabled = (await db.getSetting('auto_reply_enabled', 'true')) === 'true';
+  const groqAiEnabled = (await db.getSetting('groq_ai_enabled', 'true')) === 'true';
+  const savedModelEnabled = (await db.getSetting('saved_model_enabled', 'true')) === 'true';
 
   res.json({
     status: botStats.status,
-    botActive,
+    botActive: isBotActive,
+    autoReplyEnabled,
+    groqAiEnabled,
+    savedModelEnabled,
     account: igManager.currentUser ? igManager.currentUser.username : (credInfo.username || null),
     savedUsername: credInfo.username,
     hasSavedPassword: credInfo.hasSavedPassword,
@@ -932,9 +943,21 @@ app.post('/api/submit-otp', (req, res) => {
   res.json({ success: submitted });
 });
 
-app.post('/api/toggle', (req, res) => {
-  botActive = !botActive;
-  res.json({ botActive });
+app.post('/api/toggle', async (req, res) => {
+  const current = (await db.getSetting('bot_active', 'true')) === 'true';
+  const next = !current;
+  await db.setSetting('bot_active', String(next));
+  botActive = next;
+  res.json({ botActive: next });
+});
+
+app.post('/api/setting/toggle', async (req, res) => {
+  const { key } = req.body;
+  if (!key) return res.status(400).json({ error: 'Key required' });
+  const current = (await db.getSetting(key, 'true')) === 'true';
+  const next = !current;
+  await db.setSetting(key, String(next));
+  res.json({ success: true, key, value: next });
 });
 
 // Manual direct DM sender
